@@ -15,26 +15,42 @@ export async function extractText({ name, text, base64, mimeType }) {
   if (/pdf/i.test(mimeType || "") || /\.pdf$/i.test(name)) {
     const pdfParse = (await import("pdf-parse")).default;
     const pageTexts = [];
-    await pdfParse(buf, {
-      pagerender: async (pageData) => {
-        const tc = await pageData.getTextContent({
-          normalizeWhitespace: false,
-          disableCombineTextItems: false,
-        });
-        let lastY;
-        let pageText = "";
-        for (const item of tc.items) {
-          if (lastY === item.transform[5] || !lastY) pageText += item.str;
-          else pageText += "\n" + item.str;
-          lastY = item.transform[5];
-        }
-        pageTexts.push(pageText);
-        return pageText;
-      },
-    });
+    // pdf-parse can hang on PDFs with non-standard fonts or corrupt cross-ref
+    // tables. A blocked parse used to keep the dev server stuck on one request
+    // until the browser gave up with "Failed to fetch". 60s is generous for
+    // legitimate 30MB PDFs but short enough to fail loud on a true hang.
+    await withTimeout(
+      pdfParse(buf, {
+        pagerender: async (pageData) => {
+          const tc = await pageData.getTextContent({
+            normalizeWhitespace: false,
+            disableCombineTextItems: false,
+          });
+          let lastY;
+          let pageText = "";
+          for (const item of tc.items) {
+            if (lastY === item.transform[5] || !lastY) pageText += item.str;
+            else pageText += "\n" + item.str;
+            lastY = item.transform[5];
+          }
+          pageTexts.push(pageText);
+          return pageText;
+        },
+      }),
+      60_000,
+      `PDF parse timed out after 60s for "${name}"`
+    );
     return assemblePages(pageTexts, "\n\n");
   }
   return { text: cleanText(buf.toString("utf8")), pages: null };
+}
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
 }
 
 function splitByFormFeed(raw) {

@@ -76,7 +76,7 @@ export default function SolutionApp() {
   } = useProjectHistory();
   const {
     analyzing, phase, results, error,
-    setResults, setError, runAnalysis, clear: clearAnalysis,
+    setResults, setError, runAnalysis, cancel: cancelAnalysis, clear: clearAnalysis,
   } = useAnalysis();
   const project = useProject();
 
@@ -362,6 +362,7 @@ export default function SolutionApp() {
                   onFilesChange={handleFilesChange}
                   onRemoveFile={handleRemoveFile}
                   onAnalyzeClick={handleAnalyzeClick}
+                  onCancelClick={cancelAnalysis}
                   onSampleClick={handleLoadSample}
                   onResetClick={handleReset}
                 />
@@ -414,6 +415,7 @@ export default function SolutionApp() {
               phase={project.phase}
               error={project.error}
               onRun={handleRunProject}
+              onCancel={project.cancel}
             />
             {displayProjectVerdict && (
               <div ref={projectReportRef}>

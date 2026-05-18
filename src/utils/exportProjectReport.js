@@ -12,6 +12,7 @@
 import jsPDF from "jspdf";
 import { RATING_META } from "../data/ratingMeta";
 import { captureToPngCanvas, sliceCanvasToPdfPage } from "./pdfPaginator";
+import { condenseGap as condenseGapShared } from "./gapText";
 
 // A4 가로
 const PAGE_W_MM = 297;
@@ -185,7 +186,7 @@ function reportContentHtml(verdict, entry) {
   // PA 1.1 details (per process)
   sections.push({
     id: "pa11",
-    title: `${num()}. PA 1.1 근거 — 프로세스별 BP 평가`,
+    title: `${num()}. PA 1.1 약점 — 프로세스별 BP 평가`,
     body: processes.map((p) => {
       const bps = p.bps || [];
       const avg = bps.length ? Math.round(bps.reduce((s, b) => s + (b.scorePercent || 0), 0) / bps.length) : 0;
@@ -202,7 +203,7 @@ function reportContentHtml(verdict, entry) {
             </span>
           </div>
           ${tableHtml(
-            ["BP", "제목", "등급", "점수", "근거 / 갭"],
+            ["BP", "제목", "등급", "점수", "약점 (개선 필요)"],
             bps.map((b) => [
               `<span style="font-family:${FONT_MONO};white-space:nowrap">${esc(b.id)}</span>`,
               esc(b.title || ""),
@@ -323,12 +324,12 @@ function statusBadgeHtml(status) {
 }
 
 function summarizeBp(b) {
-  if (b.gaps?.length) return b.gaps[0];
-  if (b.evidence?.[0]?.quote) {
-    const q = b.evidence[0].quote;
-    return `근거: ${q.slice(0, 100)}${q.length > 100 ? "…" : ""}`;
-  }
-  return "—";
+  const gaps = (b.gaps || [])
+    .map((g) => condenseGapShared(g, { maxLen: 80 }))
+    .filter(Boolean);
+  if (gaps.length) return `개선 필요 — ${gaps.slice(0, 2).join(" / ")}`;
+  if (["F", "L+", "L-"].includes(b.rating)) return "특이 약점 없음";
+  return "개선 필요 — 평가 근거 미확보";
 }
 
 function tableHtml(headers, rows, aligns = []) {

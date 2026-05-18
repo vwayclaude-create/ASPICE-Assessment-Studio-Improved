@@ -29,6 +29,7 @@ export function ProjectModeCard({
   phase,
   error,
   onRun,
+  onCancel,
 }) {
   const [fileError, setFileError] = useState("");
   const [selectMode, setSelectMode] = useState("files"); // "files" | "folder"
@@ -251,6 +252,23 @@ export function ProjectModeCard({
         >
           {running ? "평가 중…" : "프로젝트 평가 실행"}
         </button>
+        {running && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              padding: "10px 18px",
+              background: "transparent",
+              color: T.err,
+              border: `1px solid ${T.err}`,
+              borderRadius: 6,
+              fontWeight: 600,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+            title="진행 중인 프로젝트 평가 취소"
+          >취소</button>
+        )}
         {phase && <span style={{ color: T.textMd, fontSize: 12 }}>{phase}</span>}
       </div>
 

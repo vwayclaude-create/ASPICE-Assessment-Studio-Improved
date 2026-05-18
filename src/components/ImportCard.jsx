@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Upload, Play, RotateCcw, Loader2, AlertCircle, Sparkles } from "lucide-react";
+import { Upload, Play, RotateCcw, Loader2, AlertCircle, Sparkles, X } from "lucide-react";
 import { T, FONTS, SECTION_CONTAINER_STYLE } from "../theme";
 import { ACCEPT_ATTR, SUPPORTED_FORMATS, getFormatByName } from "../data/formats";
 import { SectionBadge } from "./SectionBadge";
@@ -16,6 +16,7 @@ export const ImportCard = ({
   onFilesChange,
   onRemoveFile,
   onAnalyzeClick,
+  onCancelClick,
   onSampleClick,
   onResetClick,
 }) => {
@@ -245,6 +246,30 @@ export const ImportCard = ({
             {analyzing ? <Loader2 size={14} className="anim-spin" /> : <Play size={14} />}
             {analyzing ? "Analyzing" : "Run Assessment"}
           </button>
+          {analyzing && onCancelClick && (
+            <button
+              onClick={onCancelClick}
+              style={{
+                background: "transparent",
+                color: T.err,
+                border: `1px solid ${T.err}`,
+                padding: "8px 28px",
+                fontFamily: FONTS.mono,
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                borderRadius: 3,
+                fontWeight: 600,
+              }}
+              title="진행 중인 분석 취소"
+            >
+              <X size={11} /> Cancel
+            </button>
+          )}
           <button
             onClick={onSampleClick}
             style={{

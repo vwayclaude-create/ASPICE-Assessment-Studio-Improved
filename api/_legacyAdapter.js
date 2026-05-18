@@ -22,22 +22,6 @@ export function koreanizeGap(text) {
   return out;
 }
 
-const CONTEXT_LABEL = {
-  consistent: "프로젝트 컨텍스트 일치",
-  partial: "프로젝트 컨텍스트 부분 일치",
-  "off-context": "프로젝트 컨텍스트 불일치",
-  unknown: "",
-};
-
-// Render a one-line context-consistency tag. Empty string when the verdict
-// is "unknown" or missing (so we don't add noise to legacy verdicts where the
-// scorer didn't yet supply a value).
-function contextTag(cc) {
-  if (!cc || !cc.status || cc.status === "unknown") return "";
-  const label = CONTEXT_LABEL[cc.status] ?? cc.status;
-  return cc.note ? `${label} (${cc.note})` : label;
-}
-
 function summarizeProjectFingerprint(fp) {
   if (!fp || !Array.isArray(fp.dominant) || fp.dominant.length === 0) return "";
   const top = fp.dominant.slice(0, 6).join(", ");
@@ -50,19 +34,32 @@ function summarizeProjectFingerprint(fp) {
   return ` · 프로젝트 식별자: ${top}`;
 }
 
+// Compress a noisy gap line into a short improvement point. Strips engine tags,
+// keeps only the first sentence, drops trailing 합니다/부족/필요 verbs, and caps
+// at ~60 chars so each item reads as a scannable improvement bullet.
+function condenseGap(raw) {
+  if (!raw) return "";
+  let s = String(raw).trim();
+  s = s.replace(/^\[(규칙|LLM)\]\s*/i, "");
+  const firstSentence = s.split(/\.\s+/)[0];
+  if (firstSentence) s = firstSentence;
+  s = s.replace(/(에 대한 추가적?인? 설명이 필요합니다|이 (부족|필요)합니다|합니다)\.?$/u, "");
+  s = s.replace(/\.+$/u, "").trim();
+  if (s.length > 60) s = s.slice(0, 58) + "…";
+  return s;
+}
+
 /** Convert ProcessVerdict → legacy UI shape {ratings, summary, strengths, gaps}. */
 export function toLegacyShape(v, skipped = []) {
   const ratings = (v.bps || []).map((b) => {
-    const gaps = (b.gaps || []).map(koreanizeGap);
-    const ctx = contextTag(b.contextConsistency);
-    const rationaleParts = [];
-    if (gaps.length) rationaleParts.push(gaps.join("; "));
-    else if (b.evidence?.[0]?.quote) rationaleParts.push(`근거: ${b.evidence[0].quote.slice(0, 80)}…`);
-    if (ctx) rationaleParts.push(ctx);
+    const gaps = (b.gaps || []).map(koreanizeGap).map(condenseGap).filter(Boolean);
+    const rationale = gaps.length
+      ? `개선 필요 — ${gaps.slice(0, 3).join(" / ")}`
+      : "특이 약점 없음";
     return {
       bp: b.id,
       rating: b.rating,
-      rationale: rationaleParts.join(" · "),
+      rationale,
       evidence: (b.evidence || []).slice(0, 6).map((e) => {
         const base = e.location || e.artifactName || "";
         const loc = e.page != null

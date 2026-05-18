@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_ENGINE } from "../data/engineDefaults";
 
 const ANALYZE_ENDPOINT = "/api/analyze";
@@ -8,6 +8,12 @@ export const useAnalysis = () => {
   const [phase, setPhase] = useState("");
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
+  // Track the in-flight request so a new run (or unmount) cancels the previous
+  // one. Without this a quick second click leaves the first fetch alive,
+  // racing setState callbacks and wasting server work.
+  const abortRef = useRef(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   /**
    * Run a per-process evaluation via the harness serverless endpoint.
@@ -36,6 +42,9 @@ export const useAnalysis = () => {
       setError("먼저 증적 문서를 업로드하세요.");
       return null;
     }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setAnalyzing(true);
     setError("");
     setResults(null);
@@ -54,6 +63,7 @@ export const useAnalysis = () => {
           targetLevel,
           engine,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -78,6 +88,10 @@ export const useAnalysis = () => {
       setPhase("");
       return parsed;
     } catch (e) {
+      if (e?.name === "AbortError" || controller.signal.aborted) {
+        setPhase("");
+        return null;
+      }
       const isNetwork = e instanceof TypeError && /failed to fetch/i.test(e.message);
       setError(
         isNetwork
@@ -87,15 +101,22 @@ export const useAnalysis = () => {
       setPhase("");
       return null;
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setAnalyzing(false);
     }
   };
 
+  const cancel = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  };
+
   const clear = () => {
+    cancel();
     setResults(null);
     setError("");
     setPhase("");
   };
 
-  return { analyzing, phase, results, error, setResults, setError, runAnalysis, clear };
+  return { analyzing, phase, results, error, setResults, setError, runAnalysis, cancel, clear };
 };

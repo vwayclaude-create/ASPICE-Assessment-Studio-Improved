@@ -60,7 +60,28 @@
       "Bash(rm -rf C:/Users/LG/aspice-app/packages/harness/node_modules)",
       "Bash(git init *)",
       "Bash(git check-ignore *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(awk -F/ '{print $1\"/\"$2}')",
+      "Bash(git -c user.email=vway.claude@gmail.com -c user.name=vway commit -m ' *)",
+      "Bash(gh auth *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git config *)",
+      "Bash(where git-credential-manager *)",
+      "Bash(where git-credential-manager-core *)",
+      "PowerShell(Get-WmiObject *)",
+      "PowerShell($root = \\(Invoke-WebRequest -Uri http://localhost:5174/ -UseBasicParsing -TimeoutSec 10\\); \"GET / -> $\\($root.StatusCode\\), len=$\\($root.Content.Length\\)\")",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri http://localhost:5174/api/analyze -Method Post -Body '{\"processId\":\"SWE.2\",\"artifacts\":[],\"engine\":\"rule\"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 10; \"POST /api/analyze -> $\\($r.StatusCode\\)\" } catch { \"POST /api/analyze -> $\\($_.Exception.Response.StatusCode.value__\\) :: $\\($_.ErrorDetails.Message\\)\" })",
+      "Bash(dir node_modules\\\\aspice-harness)",
+      "Bash(findstr /i \"main module exports name version\")",
+      "Bash(cmd *)",
+      "Bash(findstr *)",
+      "Bash(git commit -m ' *)",
+      "Bash(xargs grep -l \"via\\\\|sourceWp\")",
+      "Bash(grep -v -E \"\\(package-lock|\\\\.lock$|^\\\\.gitignore$|^README\\\\.md$|^\\\\.gitattributes$\\)\")",
+      "Bash(grep -A 1 -E \"\\(useStorageHistory|HistoryListShell|HistoryCard\\\\.jsx|ProjectHistoryCard|exportReport\\\\.js|exportProjectReport\\\\.js|pdfPaginator|useHistory\\\\.js$|useProjectHistory\\\\.js$\\)\")",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri http://localhost:5174/ -UseBasicParsing -TimeoutSec 5; \"GET / -> $\\($r.StatusCode\\)\" } catch { \"GET / -> error: $\\($_.Exception.Message\\)\" })",
+      "Bash(git -c core.hooksPath=/dev/null commit -m '@ *)"
     ]
   }
 }

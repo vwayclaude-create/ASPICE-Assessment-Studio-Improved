@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { T, FONTS, SECTION_CONTAINER_STYLE } from "../theme";
 import { SectionBadge } from "./SectionBadge";
 import { RATING_META } from "../data/ratingMeta";
+import { condenseGap as condenseGapShared } from "../utils/gapText";
 
 export function ProjectReportCard({ verdict, onClose }) {
   if (!verdict) return null;
@@ -213,9 +214,9 @@ function Pa11Rationale({ processes }) {
 
   return (
     <>
-      <SubHeading>PA 1.1 근거 요약 (BP 평가 기준)</SubHeading>
+      <SubHeading>PA 1.1 약점 요약 (BP 평가 기준)</SubHeading>
       <div style={{ color: T.textLo, fontSize: 11, marginBottom: 10 }}>
-        PA 1.1(Process Performance)은 각 프로세스 BP의 평균으로 산출됩니다. 아래는 프로세스별 PA 1.1 등급과 그 근거가 된 BP 평가입니다.
+        PA 1.1(Process Performance)은 각 프로세스 BP의 평균으로 산출됩니다. 아래 표는 프로세스별 PA 1.1 등급과 BP별 개선 필요 항목을 정리한 것입니다.
       </div>
       {rows.map(({ proc, pa }) => {
         const bps = proc.bps || [];
@@ -245,7 +246,7 @@ function Pa11Rationale({ processes }) {
                   <th style={TH}>제목</th>
                   <th style={{ ...TH, textAlign: "center" }}>등급</th>
                   <th style={{ ...TH, textAlign: "center" }}>점수</th>
-                  <th style={TH}>근거 / 갭</th>
+                  <th style={TH}>약점 (개선 필요)</th>
                 </tr>
               </thead>
               <tbody>
@@ -273,9 +274,12 @@ function Pa11Rationale({ processes }) {
 }
 
 function summarizeBp(b) {
-  if (b.gaps?.length) return b.gaps[0];
-  if (b.evidence?.[0]?.quote) return `근거: ${b.evidence[0].quote.slice(0, 80)}${b.evidence[0].quote.length > 80 ? "…" : ""}`;
-  return "—";
+  const gaps = (b.gaps || [])
+    .map((g) => condenseGapShared(g, { maxLen: 70 }))
+    .filter(Boolean);
+  if (gaps.length) return `개선 필요 — ${gaps.slice(0, 2).join(" / ")}`;
+  if (["F", "L+", "L-"].includes(b.rating)) return "특이 약점 없음";
+  return "개선 필요 — 평가 근거 미확보";
 }
 
 function RatingPill({ code }) {

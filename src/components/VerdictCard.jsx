@@ -1,5 +1,8 @@
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 import { Loader2, FileDown, Download, MapPin } from "lucide-react";
+
+const QUOTE_PREVIEW_CHARS = 120;
+const QUOTE_COLLAPSED_MAX_HEIGHT = 60;
 import { T, FONTS } from "../theme";
 import { RATING_META, RATING_ORDER, countRatings, isCl1Pass } from "../data/ratingMeta";
 import { normalizeEvidence } from "../utils/evidence";
@@ -193,6 +196,77 @@ const InsightsPair = ({ strengths, gaps }) => {
   );
 };
 
+const EvidenceQuote = ({ quote }) => {
+  const [expanded, setExpanded] = useState(false);
+  const needsCollapse = quote.length > QUOTE_PREVIEW_CHARS;
+  const collapsed = needsCollapse && !expanded;
+  return (
+    <>
+      <div
+        data-evidence-quote
+        data-collapsed={collapsed ? "true" : "false"}
+        style={{
+          fontSize: 12,
+          color: T.textMd,
+          lineHeight: 1.55,
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+          whiteSpace: "pre-wrap",
+          minWidth: 0,
+          maxWidth: "100%",
+          border: `1px solid ${T.borderL}`,
+          borderRadius: 3,
+          padding: "6px 10px",
+          background: "#FAFBFC",
+          maxHeight: collapsed ? QUOTE_COLLAPSED_MAX_HEIGHT : "none",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        {quote}
+        {collapsed && (
+          <div
+            data-html2canvas-ignore="true"
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 22,
+              background: "linear-gradient(to bottom, rgba(250,251,252,0), #FAFBFC 80%)",
+              pointerEvents: "none",
+            }}
+          />
+        )}
+      </div>
+      {needsCollapse && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          data-html2canvas-ignore="true"
+          style={{
+            alignSelf: "flex-start",
+            marginTop: 4,
+            padding: "2px 8px",
+            background: "transparent",
+            border: `1px solid ${T.borderM}`,
+            borderRadius: 3,
+            color: T.accent,
+            fontFamily: FONTS.mono,
+            fontSize: 9.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          {expanded ? "접기" : "더 보기"}
+        </button>
+      )}
+    </>
+  );
+};
+
 const EvidenceList = ({ items }) => {
   if (!items.length) {
     return (
@@ -247,29 +321,7 @@ const EvidenceList = ({ items }) => {
               </span>
             </div>
           )}
-          {ev.quote && (
-            <div style={{
-              fontSize: 12,
-              color: T.textMd,
-              lineHeight: 1.55,
-              wordBreak: "break-word",
-              overflowWrap: "anywhere",
-              whiteSpace: "pre-wrap",
-              minWidth: 0,
-              maxWidth: "100%",
-              display: "block",
-              maxHeight: 140,
-              overflowY: "scroll",
-              scrollbarGutter: "stable",
-              paddingRight: 6,
-              border: `1px solid ${T.borderL}`,
-              borderRadius: 3,
-              padding: "6px 10px",
-              background: "#FAFBFC",
-            }}>
-              {ev.quote}
-            </div>
-          )}
+          {ev.quote && <EvidenceQuote quote={ev.quote} />}
         </div>
       ))}
     </div>
@@ -322,7 +374,7 @@ const BpRatingRow = ({ proc, bp, rating }) => {
           </span>
         </div>
         <div style={{ fontSize: 12.5, color: T.textMd, lineHeight: 1.6, marginBottom: 10, wordBreak: "break-word", overflowWrap: "anywhere", minWidth: 0 }}>
-          <strong style={{ color: T.accent, fontWeight: 600 }}>근거 · </strong>{rating.rationale}
+          <strong style={{ color: T.err, fontWeight: 600 }}>약점 · </strong>{rating.rationale}
         </div>
         <div style={{
           fontFamily: FONTS.mono,
@@ -331,7 +383,7 @@ const BpRatingRow = ({ proc, bp, rating }) => {
           color: T.textDim,
           fontWeight: 700,
           marginBottom: 6,
-        }}>증적 (EVIDENCE)</div>
+        }}>약점 (WEAKNESS)</div>
         <EvidenceList items={evidenceItems} />
       </div>
     </div>

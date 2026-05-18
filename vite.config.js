@@ -20,10 +20,25 @@ function harnessDevPlugin(env) {
     }
   }
 
+  // Cap bodies at 200MB so a runaway upload (or accidental N×30MB batch) can't
+  // hang the dev server on string concat / JSON.parse. Buffer-accumulate to
+  // avoid V8's O(n²) string growth, then decode once at the end.
+  const MAX_BODY_BYTES = 200 * 1024 * 1024
   async function readBody(req) {
-    let body = ''
-    for await (const chunk of req) body += chunk
-    return body ? JSON.parse(body) : {}
+    const chunks = []
+    let total = 0
+    for await (const chunk of req) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      total += buf.length
+      if (total > MAX_BODY_BYTES) {
+        const err = new Error(`Request body exceeds ${MAX_BODY_BYTES} bytes`)
+        err.code = 'PAYLOAD_TOO_LARGE'
+        throw err
+      }
+      chunks.push(buf)
+    }
+    if (!total) return {}
+    return JSON.parse(Buffer.concat(chunks, total).toString('utf8'))
   }
 
   function json(res, status, payload) {
@@ -54,6 +69,9 @@ function harnessDevPlugin(env) {
           const { legacy, verdict } = await handleEvaluate(body, env)
           return json(res, 200, { ...legacy, _verdict: verdict })
         } catch (e) {
+          if (e?.code === 'PAYLOAD_TOO_LARGE') {
+            return json(res, 413, { error: 'Payload too large', detail: e.message })
+          }
           console.error('[aspice] /api/analyze failed:', e)
           return json(res, 502, { error: 'Harness evaluation failed', detail: String(e?.message || e) })
         }
@@ -72,6 +90,9 @@ function harnessDevPlugin(env) {
           const { verdict } = await handleProject(body, env)
           return json(res, 200, verdict)
         } catch (e) {
+          if (e?.code === 'PAYLOAD_TOO_LARGE') {
+            return json(res, 413, { error: 'Payload too large', detail: e.message })
+          }
           console.error('[aspice] /api/project failed:', e)
           return json(res, 502, { error: 'Harness project evaluation failed', detail: String(e?.message || e) })
         }

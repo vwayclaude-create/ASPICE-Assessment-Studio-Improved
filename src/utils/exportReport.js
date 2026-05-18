@@ -19,12 +19,12 @@ export const exportReportAsText = ({ proc, results, fileName, date }) => {
   results.ratings.forEach((r) => {
     const bpDef = proc.bps.find((b) => b.id === r.bp);
     lines.push(`${r.bp} [${r.rating}] ${bpDef?.title || ""}`);
-    lines.push(`  근거: ${r.rationale}`);
+    lines.push(`  약점: ${r.rationale}`);
     const evidenceItems = normalizeEvidence(r.evidence);
     if (evidenceItems.length === 0) {
-      lines.push(`  증거: (제시된 증거 없음)`);
+      lines.push(`  약점 근거: (제시된 근거 없음)`);
     } else {
-      lines.push(`  증거:`);
+      lines.push(`  약점 근거:`);
       evidenceItems.forEach((ev, i) => {
         const loc = ev.location ? `[${ev.location}] ` : "";
         lines.push(`    ${i + 1}. ${loc}${ev.quote || "(내용 없음)"}`);
@@ -151,7 +151,13 @@ const applyInlinePdfStyle = (root) => {
 
     Array.from(evidenceList.children).forEach((item) => {
       setStyle(item, { background: "#FAFAFA", border: "1px solid #D4D4D8", "border-left": "2px solid #0A0A0C", padding: "5px 8px" });
-      const [pill, quote] = item.children;
+      // Find the quote/pill by attribute. Children layout is variable now
+      // (pill optional, quote optional, "더 보기" toggle button optional),
+      // so positional destructuring is unsafe.
+      const quote = item.querySelector('[data-evidence-quote]');
+      const pill = Array.from(item.children).find(
+        (c) => c !== quote && c.nodeType === 1 && !c.hasAttribute("data-html2canvas-ignore") && c.tagName !== "BUTTON"
+      );
       if (pill) {
         // html2canvas struggles with lucide SVG inside inline-flex containers
         // (icon AND label sometimes vanish in the rasterised output). Replace

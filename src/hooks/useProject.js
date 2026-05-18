@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_ENGINE } from "../data/engineDefaults";
 
 const PROJECT_ENDPOINT = "/api/project";
@@ -12,6 +12,9 @@ export const useProject = () => {
   const [phase, setPhase] = useState("");
   const [verdict, setVerdict] = useState(null);
   const [error, setError] = useState("");
+  const abortRef = useRef(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   /**
    * @param {{artifacts: Array<{name,text?:string,base64?:string,mimeType?:string,sizeBytes?:number}>, processIds: string[], targetLevel?: 1|2|3, engine?: "rule"|"llm"|"hybrid"}} ctx
@@ -25,6 +28,9 @@ export const useProject = () => {
       setError("평가할 프로세스를 1개 이상 선택하세요.");
       return null;
     }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setError("");
     setVerdict(null);
@@ -35,6 +41,7 @@ export const useProject = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ artifacts, processIds, targetLevel, engine }),
+        signal: controller.signal,
       });
       if (!res.ok) {
         const txt = await res.text();
@@ -46,6 +53,10 @@ export const useProject = () => {
       setPhase("");
       return data;
     } catch (e) {
+      if (e?.name === "AbortError" || controller.signal.aborted) {
+        setPhase("");
+        return null;
+      }
       // "Failed to fetch" is a TypeError from the browser when the request
       // never reached the server (dev server crashed / restarted, request
       // aborted, or a hanging pdf-parse on a large/complex PDF). Surface a
@@ -59,15 +70,22 @@ export const useProject = () => {
       setPhase("");
       return null;
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
   };
 
+  const cancel = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  };
+
   const clear = () => {
+    cancel();
     setVerdict(null);
     setError("");
     setPhase("");
   };
 
-  return { running, phase, verdict, error, runProject, clear };
+  return { running, phase, verdict, error, runProject, cancel, clear };
 };
