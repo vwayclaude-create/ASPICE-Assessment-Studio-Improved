@@ -165,10 +165,22 @@ export async function handleProject({ processIds, artifacts, targetLevel = 1, en
   const seed = loadProcessGraph();
   const graph = buildProcessGraph(inScope, { seedEdges: seed.edges });
   const procById = new Map(inScope.map((p) => [p.id, p]));
+  // The traceability matrix is scoped to the development area only — system /
+  // software / hardware / ML engineering. Management (MAN), support (SUP),
+  // acquisition (ACQ), supply (SPL), validation (VAL) and reuse (REU) edges
+  // are excluded from the matrix. Mirrors Harness#evaluateProject.
+  const DEV_AREA_CATEGORIES = new Set(["SYS", "SWE", "HWE", "MLE"]);
   const traceMatrices = [];
   for (const edge of graph.edges) {
     const tgt = procById.get(edge.to);
-    if (!tgt) continue;
+    const src = procById.get(edge.from);
+    if (!tgt || !src) continue;
+    if (
+      !DEV_AREA_CATEGORIES.has(src.category) ||
+      !DEV_AREA_CATEGORIES.has(tgt.category)
+    ) {
+      continue;
+    }
     const targetWps = (tgt.outputWorkProducts ?? []).map((w) => w.id);
     if (!targetWps.length) continue;
     for (const via of edge.via) {

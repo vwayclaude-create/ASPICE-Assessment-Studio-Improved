@@ -32,6 +32,24 @@ export const REQUIREMENT_PREFIXES = new Set([
   "SRS", "SYRS", "SWRS", "SYSRS",
 ]);
 
+/**
+ * Traceability-matrix scope. The matrix links only the requirement IDs an
+ * assessor traces through the development V-model: generic requirement
+ * (REQ / SR) plus the functional / non-functional / interface families
+ * (기능 / 비기능 / 인터페이스). Unlike REQUIREMENT_PREFIXES — the wider
+ * allow-list used for requirement→test coverage — this deliberately omits
+ * domain prefixes (SYS / SW / HW / ML) and document prefixes (SRS / …) so the
+ * matrix reflects requirement IDs, not domain or document identifiers.
+ */
+export const TRACE_ID_PREFIXES = new Set([
+  // Generic requirement
+  "REQ", "SR",
+  // Functional / non-functional / interface (기능 / 비기능 / 인터페이스)
+  "FR", "FUNC",
+  "NFR", "NF", "NFUNC",
+  "IFR", "IF", "INT", "INTF",
+]);
+
 function firstPrefixOf(id) {
   return String(id).split(/[-_]/)[0].toUpperCase();
 }

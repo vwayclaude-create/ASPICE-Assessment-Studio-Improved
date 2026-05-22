@@ -73,6 +73,30 @@ test("project: trace matrices report coverage for engineering edges", async () =
   assert.ok(sys2ToSwe1.coveragePercent > 0, `expected positive coverage, got ${sys2ToSwe1.coveragePercent}%`);
 });
 
+test("project: trace matrices keep development-area edges only", async () => {
+  const artifacts = await loadProjectFixture();
+  const harness = new Harness({ scorer: ruleScorer, targetLevel: 1 });
+  const verdict = await harness.evaluateProject({
+    artifacts,
+    processIds: ["MAN.3", "SUP.9", "SUP.10", "SYS.2", "SYS.3", "SYS.5", "SWE.1"],
+  });
+  const matrices = verdict.crossProcess.traceMatrices;
+  // Only SYS/SWE/HWE/MLE edges belong to the development area. Management,
+  // support, acquisition, supply, validation and reuse edges are excluded.
+  const nonDev = matrices.filter(
+    (m) =>
+      /^(MAN|SUP|ACQ|SPL|VAL|REU)\./.test(m.sourceProcess) ||
+      /^(MAN|SUP|ACQ|SPL|VAL|REU)\./.test(m.targetProcess)
+  );
+  assert.equal(
+    nonDev.length,
+    0,
+    `trace matrix should be development-area-only, found: ${nonDev
+      .map((m) => `${m.sourceProcess}→${m.targetProcess}`)
+      .join(", ")}`
+  );
+});
+
 test("project: changePropagation detects CR-042 references downstream", async () => {
   const artifacts = await loadProjectFixture();
   const harness = new Harness({ scorer: ruleScorer });

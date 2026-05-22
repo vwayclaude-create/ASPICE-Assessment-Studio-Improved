@@ -20,7 +20,7 @@ export const AppHeader = ({ topLeftSlot, topRightSlot }) => (
           marginBottom: 14,
           fontWeight: 500,
         }}>
-          VDA · Automotive SPICE® 4.0 · CL1 Diagnostic Workbench
+          VDA · Automotive SPICE® 4.0 · OII(Output Information Items) Diagnostic Workbench
         </div>
         <h1 style={{
           fontFamily: FONTS.sans,

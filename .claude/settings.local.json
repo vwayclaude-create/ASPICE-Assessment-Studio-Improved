@@ -81,7 +81,13 @@
       "Bash(grep -v -E \"\\(package-lock|\\\\.lock$|^\\\\.gitignore$|^README\\\\.md$|^\\\\.gitattributes$\\)\")",
       "Bash(grep -A 1 -E \"\\(useStorageHistory|HistoryListShell|HistoryCard\\\\.jsx|ProjectHistoryCard|exportReport\\\\.js|exportProjectReport\\\\.js|pdfPaginator|useHistory\\\\.js$|useProjectHistory\\\\.js$\\)\")",
       "PowerShell(try { $r = Invoke-WebRequest -Uri http://localhost:5174/ -UseBasicParsing -TimeoutSec 5; \"GET / -> $\\($r.StatusCode\\)\" } catch { \"GET / -> error: $\\($_.Exception.Message\\)\" })",
-      "Bash(git -c core.hooksPath=/dev/null commit -m '@ *)"
+      "Bash(git -c core.hooksPath=/dev/null commit -m '@ *)",
+      "Bash(git commit *)",
+      "Bash(rm .git/COMMIT_MSG_TMP.txt)",
+      "Bash(npx --no-install eslint src/components/ProjectReportCard.jsx src/utils/exportProjectReport.js)",
+      "Bash(npx --no-install esbuild src/components/ProjectReportCard.jsx src/utils/exportProjectReport.js --bundle --external:react --external:lucide-react --external:jspdf --outdir=/tmp/aspice-check --format=esm)",
+      "Bash(node_modules/.bin/eslint src/components/ProjectReportCard.jsx src/utils/exportProjectReport.js)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

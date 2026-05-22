@@ -70,8 +70,15 @@ export function ProjectReportCard({ verdict, onClose }) {
         </div>
       )}
 
-      {/* PA 1.1 rationale from BP evaluation */}
+      {/* PA 1.1 rationale from BP evaluation (CL1) */}
       <Pa11Rationale processes={processes} />
+
+      {/* PA 2.1/2.2/3.1/3.2 rationale from GP evaluation (CL2 / CL3 targets).
+          Each renders nothing when the PA was not evaluated (target level below it). */}
+      <PaGpRationale processes={processes} paId="PA 2.1" />
+      <PaGpRationale processes={processes} paId="PA 2.2" />
+      <PaGpRationale processes={processes} paId="PA 3.1" />
+      <PaGpRationale processes={processes} paId="PA 3.2" />
 
       {/* Capability summary */}
       <SubHeading>능력 수준 요약 (Capability Summary)</SubHeading>
@@ -130,7 +137,29 @@ export function ProjectReportCard({ verdict, onClose }) {
                     <td style={{ ...TD, textAlign: "center" }}>{m.targetIds.length}</td>
                     <td style={{ ...TD, textAlign: "center" }}>{m.coveragePercent == null ? "—" : `${m.coveragePercent}%`}</td>
                     <td style={{ ...TD, textAlign: "center", color: (m.orphansSource.length || m.orphansTarget.length) ? T.warm : T.textLo }}>
-                      {m.orphansSource.length} / {m.orphansTarget.length}
+                      {(m.orphansSource.length || m.orphansTarget.length) ? (
+                        <details>
+                          <summary style={{ cursor: "pointer" }}>
+                            {m.orphansSource.length} / {m.orphansTarget.length}
+                          </summary>
+                          <div style={{ textAlign: "left", fontFamily: FONTS.mono, fontSize: 11, color: T.textMd, marginTop: 6, whiteSpace: "normal", wordBreak: "break-all" }}>
+                            {m.orphansSource.length > 0 && (
+                              <div style={{ marginBottom: m.orphansTarget.length > 0 ? 4 : 0 }}>
+                                <span style={{ color: T.textLo }}>출발 누락({m.orphansSource.length}): </span>
+                                {m.orphansSource.join(", ")}
+                              </div>
+                            )}
+                            {m.orphansTarget.length > 0 && (
+                              <div>
+                                <span style={{ color: T.textLo }}>도착 누락({m.orphansTarget.length}): </span>
+                                {m.orphansTarget.join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      ) : (
+                        `${m.orphansSource.length} / ${m.orphansTarget.length}`
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -279,6 +308,110 @@ function summarizeBp(b) {
     .filter(Boolean);
   if (gaps.length) return `개선 필요 — ${gaps.slice(0, 2).join(" / ")}`;
   if (["F", "L+", "L-"].includes(b.rating)) return "특이 약점 없음";
+  return "개선 필요 — 평가 근거 미확보";
+}
+
+// PA 2.1 ~ PA 3.2 are evaluated GP-by-GP (unlike PA 1.1 which is anchored on
+// BP results). When the target CL is 1 these PAs are not evaluated and the
+// section is skipped entirely.
+const PA_GP_META = {
+  "PA 2.1": {
+    subtitle: "프로세스 수행 관리 (Process Performance Management)",
+    intro:
+      "PA 2.1은 프로세스 수행이 계획·모니터링·조정되는지를 일반 실무(GP) 단위로 평가합니다. 아래 표는 프로세스별 PA 2.1 등급과 GP별 개선 필요 항목입니다.",
+  },
+  "PA 2.2": {
+    subtitle: "작업산출물 관리 (Work Product Management)",
+    intro:
+      "PA 2.2는 작업산출물의 정의·관리·검토가 적절한지를 일반 실무(GP) 단위로 평가합니다. 아래 표는 프로세스별 PA 2.2 등급과 GP별 개선 필요 항목입니다.",
+  },
+  "PA 3.1": {
+    subtitle: "프로세스 정의 (Process Definition)",
+    intro:
+      "PA 3.1은 표준 프로세스가 정의·유지되는지를 일반 실무(GP) 단위로 평가합니다. 아래 표는 프로세스별 PA 3.1 등급과 GP별 개선 필요 항목입니다.",
+  },
+  "PA 3.2": {
+    subtitle: "프로세스 배포 (Process Deployment)",
+    intro:
+      "PA 3.2는 정의된 표준 프로세스가 실제로 배포·운영되는지를 일반 실무(GP) 단위로 평가합니다. 아래 표는 프로세스별 PA 3.2 등급과 GP별 개선 필요 항목입니다.",
+  },
+};
+
+function PaGpRationale({ processes, paId }) {
+  const meta = PA_GP_META[paId];
+  if (!meta) return null;
+  const rows = (processes || [])
+    .map((p) => ({ proc: p, pa: p.pas?.find((x) => x.paId === paId) }))
+    .filter((r) => r.pa && (r.pa.gps?.length ?? 0) > 0);
+  if (!rows.length) return null;
+
+  return (
+    <>
+      <SubHeading>{paId} {meta.subtitle} — GP 평가</SubHeading>
+      <div style={{ color: T.textLo, fontSize: 11, marginBottom: 10 }}>{meta.intro}</div>
+      {rows.map(({ proc, pa }) => {
+        const gps = pa.gps || [];
+        const avg = gps.length
+          ? Math.round(gps.reduce((s, g) => s + (g.scorePercent || 0), 0) / gps.length)
+          : 0;
+        const weak = gps.filter((g) => ["P+", "P-", "N"].includes(g.rating));
+        return (
+          <div key={proc.processId} style={{
+            border: `1px solid ${T.borderL}`,
+            borderRadius: 5,
+            padding: "10px 12px",
+            marginBottom: 10,
+            background: T.surfaceL || "transparent",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <strong style={{ color: T.textHi, fontSize: 13 }}>{proc.processId}</strong>
+              <span style={{ color: T.textLo, fontSize: 12 }}>{proc.processName}</span>
+              <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: T.textLo, fontSize: 11 }}>{paId}</span>
+                <RatingPill code={pa.rating} />
+                <span style={{ color: T.textLo, fontSize: 11, fontFamily: FONTS.mono }}>GP 평균 {avg}%</span>
+              </span>
+            </div>
+            <table style={TBL}>
+              <thead>
+                <tr>
+                  <th style={TH}>GP</th>
+                  <th style={TH}>제목</th>
+                  <th style={{ ...TH, textAlign: "center" }}>등급</th>
+                  <th style={{ ...TH, textAlign: "center" }}>점수</th>
+                  <th style={TH}>약점 (개선 필요)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gps.map((g) => (
+                  <tr key={g.id}>
+                    <td style={{ ...TD, fontFamily: FONTS.mono, whiteSpace: "nowrap" }}>{g.id}</td>
+                    <td style={TD}>{g.title}</td>
+                    <td style={{ ...TD, textAlign: "center" }}><RatingPill code={g.rating} /></td>
+                    <td style={{ ...TD, textAlign: "center", fontFamily: FONTS.mono }}>{Math.round(g.scorePercent || 0)}%</td>
+                    <td style={{ ...TD, color: T.textMd, fontSize: 11 }}>{summarizeGp(g)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {weak.length > 0 && (
+              <div style={{ marginTop: 8, color: T.warm, fontSize: 11 }}>
+                약점 GP({weak.length}건): {weak.map((g) => `${g.id}(${g.rating})`).join(", ")} — {paId} 등급을 끌어내리는 주된 원인.
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function summarizeGp(g) {
+  const gaps = (g.gaps || [])
+    .map((x) => condenseGapShared(x, { maxLen: 70 }))
+    .filter(Boolean);
+  if (gaps.length) return `개선 필요 — ${gaps.slice(0, 2).join(" / ")}`;
+  if (["F", "L+", "L-"].includes(g.rating)) return "특이 약점 없음";
   return "개선 필요 — 평가 근거 미확보";
 }
 

@@ -218,23 +218,94 @@ function reportContentHtml(verdict, entry) {
     }).join(""),
   });
 
+  // PA 2.1 ~ PA 3.2 details (per process, GP-by-GP). Only present when the
+  // target CL is 2 or 3 — otherwise the harness does not evaluate these PAs
+  // and the section is skipped (no `pas` entry → no rows).
+  const PA_GP_LABELS = {
+    "PA 2.1": "프로세스 수행 관리",
+    "PA 2.2": "작업산출물 관리",
+    "PA 3.1": "프로세스 정의",
+    "PA 3.2": "프로세스 배포",
+  };
+  for (const [paId, label] of Object.entries(PA_GP_LABELS)) {
+    const paRows = processes
+      .map((p) => ({ proc: p, pa: p.pas?.find((x) => x.paId === paId) }))
+      .filter((r) => r.pa && (r.pa.gps?.length ?? 0) > 0);
+    if (!paRows.length) continue;
+    sections.push({
+      id: `pa${paId.replace(/\D/g, "")}`,
+      title: `${num()}. ${paId} 약점 — 프로세스별 GP 평가 (${label})`,
+      body: paRows.map(({ proc, pa }) => {
+        const gps = pa.gps || [];
+        const avg = gps.length ? Math.round(gps.reduce((s, g) => s + (g.scorePercent || 0), 0) / gps.length) : 0;
+        return `
+          <div style="border:1px solid #E2E8F0;border-radius:5px;padding:12px 14px;margin-bottom:12px;background:#F8FAFC">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <strong style="font-size:13px;color:#0F172A">${esc(proc.processId)}</strong>
+              <span style="color:#64748B;font-size:12px">${esc(proc.processName)}</span>
+              <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px">
+                <span style="font-size:10px;color:#64748B">${esc(paId)}</span>
+                ${ratingPillHtml(pa.rating)}
+                <span style="font-family:${FONT_MONO};font-size:10px;color:#64748B">GP 평균 ${avg}%</span>
+              </span>
+            </div>
+            ${tableHtml(
+              ["GP", "제목", "등급", "점수", "약점 (개선 필요)"],
+              gps.map((g) => [
+                `<span style="font-family:${FONT_MONO};white-space:nowrap">${esc(g.id)}</span>`,
+                esc(g.title || ""),
+                ratingPillHtml(g.rating),
+                `<span style="font-family:${FONT_MONO}">${Math.round(g.scorePercent || 0)}%</span>`,
+                `<span style="color:#475569;font-size:11px">${esc(summarizeGp(g))}</span>`,
+              ]),
+              [null, null, "center", "center", null],
+            )}
+          </div>
+        `;
+      }).join(""),
+    });
+  }
+
   // Traceability
   if (traceMatrices.length > 0) {
+    const traceTable = tableHtml(
+      ["출발 → 도착", "WP", "출발 ID 수", "도착 ID 수", "커버리지", "고아 (출발/도착)"],
+      traceMatrices.map((m) => [
+        `${esc(m.sourceProcess)} → ${esc(m.targetProcess)}`,
+        `<span style="font-family:${FONT_MONO}">${esc(m.sourceWp)}</span>`,
+        String(m.sourceIds?.length ?? 0),
+        String(m.targetIds?.length ?? 0),
+        m.coveragePercent == null ? "—" : `${m.coveragePercent}%`,
+        `<span style="color:${(m.orphansSource?.length || m.orphansTarget?.length) ? "#D97706" : "#64748B"}">${m.orphansSource?.length ?? 0} / ${m.orphansTarget?.length ?? 0}</span>`,
+      ]),
+      [null, null, "center", "center", "center", "center"],
+    );
+    // Per-edge orphan ID listing — the matrix cell only carries counts, so
+    // the actual unreferenced IDs are spelled out here for follow-up.
+    const orphanDetail = traceMatrices
+      .filter((m) => (m.orphansSource?.length || m.orphansTarget?.length))
+      .map((m) => {
+        const lines = [];
+        if (m.orphansSource?.length) {
+          lines.push(`<div><span style="color:#64748B">출발 누락(${m.orphansSource.length}): </span><span style="font-family:${FONT_MONO};word-break:break-all">${esc(m.orphansSource.join(", "))}</span></div>`);
+        }
+        if (m.orphansTarget?.length) {
+          lines.push(`<div><span style="color:#64748B">도착 누락(${m.orphansTarget.length}): </span><span style="font-family:${FONT_MONO};word-break:break-all">${esc(m.orphansTarget.join(", "))}</span></div>`);
+        }
+        return `
+          <div style="padding:8px 10px;border-left:3px solid #D97706;background:#F8FAFC;margin-bottom:6px;border-radius:0 3px 3px 0;font-size:11px;color:#475569">
+            <strong style="color:#0F172A">${esc(m.sourceProcess)} → ${esc(m.targetProcess)}</strong>
+            <span style="color:#64748B"> · WP ${esc(m.sourceWp)}</span>
+            ${lines.join("")}
+          </div>`;
+      })
+      .join("");
     sections.push({
       id: "trace",
       title: `${num()}. 추적성 매트릭스 (Traceability Matrix)`,
-      body: tableHtml(
-        ["출발 → 도착", "WP", "출발 ID 수", "도착 ID 수", "커버리지", "고아 (출발/도착)"],
-        traceMatrices.map((m) => [
-          `${esc(m.sourceProcess)} → ${esc(m.targetProcess)}`,
-          `<span style="font-family:${FONT_MONO}">${esc(m.sourceWp)}</span>`,
-          String(m.sourceIds?.length ?? 0),
-          String(m.targetIds?.length ?? 0),
-          m.coveragePercent == null ? "—" : `${m.coveragePercent}%`,
-          `<span style="color:${(m.orphansSource?.length || m.orphansTarget?.length) ? "#D97706" : "#64748B"}">${m.orphansSource?.length ?? 0} / ${m.orphansTarget?.length ?? 0}</span>`,
-        ]),
-        [null, null, "center", "center", "center", "center"],
-      ),
+      body: orphanDetail
+        ? `${traceTable}<div style="margin-top:10px"><div style="font-size:11px;color:#64748B;margin-bottom:6px">고아 ID 상세 (참조되지 않은 ID 목록)</div>${orphanDetail}</div>`
+        : traceTable,
     });
   }
 
@@ -329,6 +400,15 @@ function summarizeBp(b) {
     .filter(Boolean);
   if (gaps.length) return `개선 필요 — ${gaps.slice(0, 2).join(" / ")}`;
   if (["F", "L+", "L-"].includes(b.rating)) return "특이 약점 없음";
+  return "개선 필요 — 평가 근거 미확보";
+}
+
+function summarizeGp(g) {
+  const gaps = (g.gaps || [])
+    .map((x) => condenseGapShared(x, { maxLen: 80 }))
+    .filter(Boolean);
+  if (gaps.length) return `개선 필요 — ${gaps.slice(0, 2).join(" / ")}`;
+  if (["F", "L+", "L-"].includes(g.rating)) return "특이 약점 없음";
   return "개선 필요 — 평가 근거 미확보";
 }
 

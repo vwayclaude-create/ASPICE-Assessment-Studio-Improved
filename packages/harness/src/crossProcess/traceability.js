@@ -1,3 +1,5 @@
+import { isRequirementId, TRACE_ID_PREFIXES } from "./coverage.js";
+
 /**
  * Bidirectional traceability check for one process-to-process edge.
  *
@@ -8,6 +10,11 @@
  *     04-04 software architecture) that must reference those source IDs to
  *     demonstrate forward trace.
  *   - Backward trace: each target ID claims to derive from a source ID.
+ *
+ * Both source and target IDs are scoped to TRACE_ID_PREFIXES — generic
+ * requirement plus functional / non-functional / interface prefixes. Domain
+ * (SYS/SW/HW/ML) and document (SRS/…) IDs are excluded so the matrix links
+ * 기능 / 비기능 / 인터페이스 requirements, not arbitrary identifiers.
  *
  * We compute:
  *   - coveragePercent : fraction of source IDs referenced by any target artifact.
@@ -31,8 +38,14 @@ export function checkTraceability(artifacts, spec) {
     a.wpidCandidates?.some((w) => targetWpSet.has(w))
   );
 
-  const sourceIds = new Set(sourceArtifacts.flatMap((a) => a.extractedIds ?? []));
-  const targetIds = new Set(targetArtifacts.flatMap((a) => a.extractedIds ?? []));
+  // Restrict the matrix to requirement-shaped IDs only — generic requirement
+  // plus functional / non-functional / interface prefixes. Domain (SYS/SW/HW
+  // /ML) and document (SRS/…) IDs are dropped from both ends of the edge.
+  const traceIds = (a) =>
+    (a.extractedIds ?? []).filter((id) => isRequirementId(id, TRACE_ID_PREFIXES));
+
+  const sourceIds = new Set(sourceArtifacts.flatMap(traceIds));
+  const targetIds = new Set(targetArtifacts.flatMap(traceIds));
 
   const links = [];
   const linkedSource = new Set();
@@ -40,10 +53,11 @@ export function checkTraceability(artifacts, spec) {
 
   for (const tgt of targetArtifacts) {
     const body = tgt.text ?? "";
+    const tgtIds = traceIds(tgt);
     for (const srcId of sourceIds) {
       if (body.includes(srcId)) {
         linkedSource.add(srcId);
-        for (const tgtId of tgt.extractedIds ?? []) {
+        for (const tgtId of tgtIds) {
           linkedTarget.add(tgtId);
           links.push({
             fromId: srcId,
