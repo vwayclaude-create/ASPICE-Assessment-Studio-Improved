@@ -230,17 +230,50 @@ const sliceCanvasToPdf = (pdf, canvas, imgX, yTop, sliceMm, srcY, srcH, scaledIm
   });
 };
 
+const DISCLAIMER_TEXT = "주의 : 본 진단 및 평가 결과는 비공식 갭 진단이며, iNTACS 공식 평가를 대체하지 않으며, 심사 또는 평가 근거로 사용되지 않습니다.";
+
+// jsPDF 기본 폰트(Helvetica)는 한글을 못 그려서 pdf.text() 로는 disclaimer 가 mojibake 가 된다.
+// html2canvas 로 한 번 캡처해 이미지로 모든 페이지에 도장 찍듯이 박아준다.
+const captureDisclaimerImage = async () => {
+  const stage = document.createElement("div");
+  // width 는 본문 캡처와 비슷한 스케일(약 1100px) 로 잡고, 한글 평균 폭(≈12px @ 11pt)
+  // 기준으로 disclaimer 한 줄(≈71자)이 여유롭게 들어가도록 폰트는 11px 로 둔다.
+  stage.style.cssText = `
+    position: fixed;
+    left: -99999px;
+    top: 0;
+    width: 1100px;
+    padding: 4px 12px;
+    background: #FFFFFF;
+    font-family: 'Inter', 'Noto Sans KR', system-ui, sans-serif;
+    font-size: 11px;
+    color: #6B7280;
+    text-align: center;
+    letter-spacing: -0.005em;
+    line-height: 1.35;
+  `;
+  stage.textContent = DISCLAIMER_TEXT;
+  document.body.appendChild(stage);
+  try {
+    return await captureToPngCanvas(stage);
+  } finally {
+    stage.remove();
+  }
+};
+
 export const exportReportAsPdf = async ({ proc, node }) => {
   const canvas = await captureToPngCanvas(node, {
     windowWidth: node.scrollWidth,
     onclone: attachPrintStyle,
   });
 
+  const disclaimerCanvas = await captureDisclaimerImage();
   const imgData = canvas.toDataURL("image/png");
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const marginY = 8;
+  // 본문 하단 여백을 12mm 로 잡아 footer 위에 disclaimer 한 줄이 들어갈 공간을 확보한다.
+  const marginY = 12;
   const sideMargin = 5;
   const headerPad = 8;
   const headerH = 16;
@@ -271,9 +304,13 @@ export const exportReportAsPdf = async ({ proc, node }) => {
     }
   }
 
+  const disclaimerImg = disclaimerCanvas.toDataURL("image/png");
+  const disclaimerWMm = pageWidth - sideMargin * 2;
+  const disclaimerHMm = (disclaimerCanvas.height * disclaimerWMm) / disclaimerCanvas.width;
   const pc = pdf.internal.getNumberOfPages();
   for (let i = 1; i <= pc; i++) {
     pdf.setPage(i);
+    pdf.addImage(disclaimerImg, "PNG", sideMargin, pageHeight - 4 - disclaimerHMm - 1.2, disclaimerWMm, disclaimerHMm);
     pdf.setFontSize(7);
     pdf.setTextColor(120, 120, 130);
     pdf.text(`Automotive SPICE® VDA QMC · ASPICE Workbench  ·  ${i}/${pc}`, pageWidth / 2, pageHeight - 4, { align: "center" });

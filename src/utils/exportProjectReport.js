@@ -70,7 +70,12 @@ function coverHtml({ entry, verdict }) {
   const target = verdict?.meta?.targetLevel ?? entry?.targetLevel ?? 1;
   const arts = entry?.artifactNames || [];
   const procIds = entry?.processIds || (verdict?.processes || []).map((p) => p.processId);
-  const engine = (entry?.engine || verdict?.meta?.engine || "hybrid").toUpperCase();
+  const engineList = Array.isArray(entry?.engines) && entry.engines.length
+    ? entry.engines
+    : Array.isArray(verdict?.meta?.engines) && verdict.meta.engines.length
+      ? verdict.meta.engines
+      : [entry?.engine || verdict?.meta?.engine || "hybrid"];
+  const engine = engineList.map((e) => String(e).toUpperCase()).join(" + ");
   return `
     <div style="${baseSectionPad}padding-top:80px;padding-bottom:80px;height:${CAPTURE_W_PX * (PAGE_H_MM / PAGE_W_MM)}px;display:flex;flex-direction:column;justify-content:space-between">
       <div>
@@ -104,8 +109,13 @@ function coverHtml({ entry, verdict }) {
           </ul>
         </div>
       </div>
-      <div style="border-top:1px solid #CBD5E1;padding-top:12px;font-size:10px;font-family:${FONT_MONO};color:#94A3B8;letter-spacing:0.1em">
-        Automotive SPICE® · VDA QMC · ASPICE Workbench
+      <div>
+        <div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:4px;padding:10px 14px;margin-bottom:14px;font-family:${FONT_SANS};font-size:11.5px;color:#92400E;line-height:1.55">
+          <strong style="color:#78350F">주의</strong> : 본 진단 및 평가 결과는 비공식 갭 진단이며, iNTACS 공식 평가를 대체하지 않으며, 심사 또는 평가 근거로 사용되지 않습니다.
+        </div>
+        <div style="border-top:1px solid #CBD5E1;padding-top:12px;font-size:10px;font-family:${FONT_MONO};color:#94A3B8;letter-spacing:0.1em">
+          Automotive SPICE® · VDA QMC · ASPICE Workbench
+        </div>
       </div>
     </div>
   `;

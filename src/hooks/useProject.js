@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_ENGINE } from "../data/engineDefaults";
+import { DEFAULT_ENGINES, normalizeEngines } from "../data/engineDefaults";
 
 const PROJECT_ENDPOINT = "/api/project";
 
@@ -17,9 +17,12 @@ export const useProject = () => {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   /**
-   * @param {{artifacts: Array<{name,text?:string,base64?:string,mimeType?:string,sizeBytes?:number}>, processIds: string[], targetLevel?: 1|2|3, engine?: "rule"|"llm"|"hybrid"}} ctx
+   * @param {{artifacts: Array<{name,text?:string,base64?:string,mimeType?:string,sizeBytes?:number}>, processIds: string[], targetLevel?: 1|2|3, engines?: Array<"rule"|"llm"|"hybrid"|"custom">, engine?: "rule"|"llm"|"hybrid"|"custom", customRules?: object}} ctx
+   *   `customRules` is the user's rule book; only sent (and only used by the
+   *   server) when one of the selected engines is "custom".
    */
-  const runProject = async ({ artifacts, processIds, targetLevel = 1, engine = DEFAULT_ENGINE }) => {
+  const runProject = async ({ artifacts, processIds, targetLevel = 1, engines, engine, customRules }) => {
+    const enginesList = normalizeEngines(engines ?? engine ?? DEFAULT_ENGINES);
     if (!artifacts?.length) {
       setError("프로젝트 증적 파일을 1개 이상 업로드하세요.");
       return null;
@@ -36,11 +39,20 @@ export const useProject = () => {
     setVerdict(null);
 
     try {
-      setPhase(`${processIds.length}개 프로세스 평가 중 (${engine})`);
+      const engineLabel = enginesList.length > 1
+        ? `${enginesList.length}개 엔진 평균`
+        : enginesList[0];
+      setPhase(`${processIds.length}개 프로세스 평가 중 (${engineLabel})`);
       const res = await fetch(PROJECT_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artifacts, processIds, targetLevel, engine }),
+        body: JSON.stringify({
+          artifacts,
+          processIds,
+          targetLevel,
+          engines: enginesList,
+          ...(enginesList.includes("custom") && customRules ? { customRules } : {}),
+        }),
         signal: controller.signal,
       });
       if (!res.ok) {

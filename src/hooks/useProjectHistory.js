@@ -46,16 +46,26 @@ export const buildProjectHistoryEntry = ({
   artifacts,
   processIds,
   targetLevel,
+  engines,
   engine,
   isSample = false,
-}) => ({
-  id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-  date: new Date().toISOString(),
-  artifactNames: (artifacts || []).map((a) => a.name),
-  artifactCount: artifacts?.length ?? 0,
-  processIds: [...(processIds || [])],
-  targetLevel,
-  engine,
-  verdict,
-  isSample,
-});
+}) => {
+  const enginesList = Array.isArray(engines) && engines.length
+    ? [...engines]
+    : engine
+      ? [engine]
+      : [];
+  return {
+    id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    date: new Date().toISOString(),
+    artifactNames: (artifacts || []).map((a) => a.name),
+    artifactCount: artifacts?.length ?? 0,
+    processIds: [...(processIds || [])],
+    targetLevel,
+    engines: enginesList,
+    // Keep `engine` populated with the first engine for legacy history readers.
+    engine: enginesList[0],
+    verdict,
+    isSample,
+  };
+};

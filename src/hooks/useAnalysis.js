@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_ENGINE } from "../data/engineDefaults";
+import { DEFAULT_ENGINES, normalizeEngines } from "../data/engineDefaults";
 
 const ANALYZE_ENDPOINT = "/api/analyze";
 
@@ -26,11 +26,14 @@ export const useAnalysis = () => {
    *   fileB64?: string,
    *   fileText?: string,
    *   fileName?: string,
-   *   engine?: "rule"|"llm"|"hybrid",
+   *   engines?: Array<"rule"|"llm"|"hybrid"|"custom">,
+   *   engine?: "rule"|"llm"|"hybrid"|"custom",
+   *   customRules?: object,
    *   targetLevel?: 1|2|3,
    * }} ctx
    */
-  const runAnalysis = async ({ proc, artifacts, fileB64, fileText, fileName, engine = DEFAULT_ENGINE, targetLevel = 1 }) => {
+  const runAnalysis = async ({ proc, artifacts, fileB64, fileText, fileName, engines, engine, customRules, targetLevel = 1 }) => {
+    const enginesList = normalizeEngines(engines ?? engine ?? DEFAULT_ENGINES);
     const arts = Array.isArray(artifacts) && artifacts.length
       ? artifacts
       : (fileB64 || fileText)
@@ -53,7 +56,11 @@ export const useAnalysis = () => {
       setPhase("하네스 · 프로세스 스펙 로드");
       await new Promise((r) => setTimeout(r, 150));
 
-      setPhase(`${proc.id} · ${engine === "rule" ? "룰 엔진" : engine === "llm" ? "LLM" : "하이브리드"} 평가 중`);
+      const ENGINE_LABEL = { rule: "룰 엔진", llm: "LLM", hybrid: "하이브리드", custom: "사용자 룰" };
+      const enginePhase = enginesList.length > 1
+        ? `${enginesList.length}개 엔진 평균`
+        : (ENGINE_LABEL[enginesList[0]] || enginesList[0]);
+      setPhase(`${proc.id} · ${enginePhase} 평가 중`);
       const response = await fetch(ANALYZE_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -61,7 +68,8 @@ export const useAnalysis = () => {
           processId: proc.id,
           artifacts: arts,
           targetLevel,
-          engine,
+          engines: enginesList,
+          ...(enginesList.includes("custom") && customRules ? { customRules } : {}),
         }),
         signal: controller.signal,
       });

@@ -32,7 +32,7 @@ export class Harness {
     this.wpCatalog = loadWorkProducts();
   }
 
-  async evaluateProcess({ processId, artifacts, projectFingerprint }) {
+  async evaluateProcess({ processId, artifacts, projectFingerprint, extraBPs = [] }) {
     const processSpec = loadProcess(processId);
     if (!processSpec) throw new Error(`Unknown process: ${processId}`);
     const indexed = this.#indexOnce(artifacts);
@@ -42,10 +42,16 @@ export class Harness {
     // for stand-alone process-mode runs.
     const fingerprint = projectFingerprint ?? computeProjectFingerprint(indexed);
 
-    const bps = await evaluateBPs(processSpec, indexed, this.scorer, { projectFingerprint: fingerprint });
-    const wps = await evaluateWPs(processSpec, indexed, this.scorer, { projectFingerprint: fingerprint });
+    // Merge user-defined custom BPs into the process spec so they flow through
+    // the standard BP evaluator and PA 1.1 average.
+    const effectiveSpec = extraBPs.length
+      ? { ...processSpec, basePractices: [...processSpec.basePractices, ...extraBPs] }
+      : processSpec;
+
+    const bps = await evaluateBPs(effectiveSpec, indexed, this.scorer, { projectFingerprint: fingerprint });
+    const wps = await evaluateWPs(effectiveSpec, indexed, this.scorer, { projectFingerprint: fingerprint });
     const pas = await evaluatePAs(
-      processSpec,
+      effectiveSpec,
       this.paSpecs,
       bps,
       wps,

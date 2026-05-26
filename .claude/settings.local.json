@@ -87,7 +87,12 @@
       "Bash(npx --no-install eslint src/components/ProjectReportCard.jsx src/utils/exportProjectReport.js)",
       "Bash(npx --no-install esbuild src/components/ProjectReportCard.jsx src/utils/exportProjectReport.js --bundle --external:react --external:lucide-react --external:jspdf --outdir=/tmp/aspice-check --format=esm)",
       "Bash(node_modules/.bin/eslint src/components/ProjectReportCard.jsx src/utils/exportProjectReport.js)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(cat)",
+      "Bash(git -c core.hooksPath=/dev/null commit --amend -F .git/COMMIT_MSG_TMP.txt)",
+      "Read(//c/c/Users/LG/aspice-app/src/**)",
+      "Bash(npx --no-install eslint src/components/CustomRulesModal.jsx src/hooks/useCustomRules.js src/data/customRuleDefaults.js src/components/ProjectModeCard.jsx src/SolutionApp.jsx src/hooks/useProject.js src/hooks/useAnalysis.js api/_harnessService.js packages/harness/src/evaluators/customScorer.js)",
+      "Bash(npx --no-install vite build)"
     ]
   }
 }

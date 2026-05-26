@@ -16,11 +16,12 @@ import { useHistory, buildHistoryEntry } from "./hooks/useHistory";
 import { useProjectHistory, buildProjectHistoryEntry } from "./hooks/useProjectHistory";
 import { useAnalysis } from "./hooks/useAnalysis";
 import { useProject } from "./hooks/useProject";
+import { useCustomRules } from "./hooks/useCustomRules";
 
 import { extractFileContent } from "./utils/fileReaders";
 import { exportReportAsText, exportReportAsPdf } from "./utils/exportReport";
 import { exportProjectReportAsPdf } from "./utils/exportProjectReport";
-import { DEFAULT_ENGINE } from "./data/engineDefaults";
+import { DEFAULT_ENGINES, ENGINE_IDS } from "./data/engineDefaults";
 
 import { AppHeader } from "./components/AppHeader";
 import { AppFooter } from "./components/AppFooter";
@@ -35,6 +36,7 @@ import { HelpButton } from "./components/HelpButton";
 import { HelpModal } from "./components/HelpModal";
 import { GlobalStyles } from "./components/GlobalStyles";
 import { ProjectModeCard } from "./components/ProjectModeCard";
+import { CustomRulesModal } from "./components/CustomRulesModal";
 import { ProjectReportCard } from "./components/ProjectReportCard";
 import { ProjectHistoryCard } from "./components/ProjectHistoryCard";
 import { ModeToggle, MODE_PER_PROCESS, MODE_PROJECT } from "./components/ModeToggle";
@@ -63,9 +65,25 @@ export default function SolutionApp() {
   const [projectArtifacts, setProjectArtifacts] = useState([]);
   const [projectProcessIds, setProjectProcessIds] = useState([]);
   const [projectTargetLevel, setProjectTargetLevel] = useState(1);
-  const [projectEngine, setProjectEngine] = useState(DEFAULT_ENGINE);
+  const [projectEngines, setProjectEngines] = useState(DEFAULT_ENGINES);
+  const handleToggleEngine = (id) => {
+    if (!ENGINE_IDS.includes(id)) return;
+    setProjectEngines((prev) => {
+      if (prev.includes(id)) {
+        // Never let the user empty the list; keep the last engine pinned on.
+        if (prev.length <= 1) return prev;
+        return prev.filter((x) => x !== id);
+      }
+      // Preserve declaration order so "Rule, LLM, Hybrid, Custom" is stable.
+      return ENGINE_IDS.filter((e) => prev.includes(e) || e === id);
+    });
+  };
   const [selectedProjectHistoryId, setSelectedProjectHistoryId] = useState(null);
   const [exportingProjectEntryId, setExportingProjectEntryId] = useState(null);
+  const [customRulesOpen, setCustomRulesOpen] = useState(false);
+
+  // Custom-scorer rule book — persisted in IndexedDB, shared by both modes.
+  const customRules = useCustomRules();
 
   const { history, addEntry, removeEntry, clearAll } = useHistory();
   const {
@@ -180,7 +198,8 @@ export default function SolutionApp() {
     const parsed = await runAnalysis({
       proc,
       artifacts: processFiles,
-      engine: projectEngine, // share the same scorer engine as project mode
+      engines: projectEngines, // share the same scorer selection as project mode
+      customRules: customRules.ruleBook,
       targetLevel: projectTargetLevel,
     });
     if (parsed) {
@@ -265,7 +284,8 @@ export default function SolutionApp() {
       artifacts: projectArtifacts,
       processIds: projectProcessIds,
       targetLevel: projectTargetLevel,
-      engine: projectEngine,
+      engines: projectEngines,
+      customRules: customRules.ruleBook,
     });
     if (verdict) {
       addProjectHistoryEntry(buildProjectHistoryEntry({
@@ -273,7 +293,7 @@ export default function SolutionApp() {
         artifacts: projectArtifacts,
         processIds: projectProcessIds,
         targetLevel: projectTargetLevel,
-        engine: projectEngine,
+        engines: projectEngines,
       }));
     }
   };
@@ -358,7 +378,7 @@ export default function SolutionApp() {
                   phase={phase}
                   error={error}
                   showReset={hasFile || !!results}
-                  engine={projectEngine}
+                  engines={projectEngines}
                   onFilesChange={handleFilesChange}
                   onRemoveFile={handleRemoveFile}
                   onAnalyzeClick={handleAnalyzeClick}
@@ -409,8 +429,14 @@ export default function SolutionApp() {
               onToggleGroupProcesses={handleToggleGroupProcesses}
               targetLevel={projectTargetLevel}
               onChangeLevel={setProjectTargetLevel}
-              engine={projectEngine}
-              onChangeEngine={setProjectEngine}
+              engines={projectEngines}
+              onToggleEngine={handleToggleEngine}
+              customRuleStats={{
+                enabled: customRules.ruleBook.rules.filter((r) => r.enabled).length,
+                total: customRules.ruleBook.rules.length,
+                customBPs: (customRules.ruleBook.customBPs || []).length,
+              }}
+              onEditCustomRules={() => setCustomRulesOpen(true)}
               running={project.running}
               phase={project.phase}
               error={project.error}
@@ -493,6 +519,23 @@ export default function SolutionApp() {
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
 
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
+
+      {customRulesOpen && (
+        <CustomRulesModal
+          ruleBook={customRules.ruleBook}
+          addRule={customRules.addRule}
+          updateRule={customRules.updateRule}
+          toggleRule={customRules.toggleRule}
+          deleteRule={customRules.deleteRule}
+          setUseAutoFallback={customRules.setUseAutoFallback}
+          replaceRuleBook={customRules.replaceRuleBook}
+          resetToDefaults={customRules.resetToDefaults}
+          addCustomBP={customRules.addCustomBP}
+          updateCustomBP={customRules.updateCustomBP}
+          deleteCustomBP={customRules.deleteCustomBP}
+          onClose={() => setCustomRulesOpen(false)}
+        />
+      )}
     </div>
   );
 }

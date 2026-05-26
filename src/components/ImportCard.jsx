@@ -12,7 +12,7 @@ export const ImportCard = ({
   phase,
   error,
   showReset,
-  engine,
+  engines = [],
   onFilesChange,
   onRemoveFile,
   onAnalyzeClick,
@@ -67,12 +67,18 @@ export const ImportCard = ({
   const borderColor = dropActive ? T.warm : (hasFile ? T.accent : T.borderH);
   const bgColor = dropActive ? "rgba(245,158,11,0.08)" : (hasFile ? T.accentSoft : T.surface2);
 
-  const engineLabel =
-    engine === "rule" ? "Rule" : engine === "llm" ? "LLM" : "Hybrid";
-  const engineHint =
-    engine === "rule" ? "키워드 매칭 (오프라인)"
-      : engine === "llm" ? "LLM 단독 평가"
-        : "Rule 0.4 + LLM 0.6 (프로젝트 모드와 동일)";
+  const ENGINE_LABEL = { rule: "Rule", llm: "LLM", hybrid: "Hybrid", custom: "Custom" };
+  const ENGINE_HINT = {
+    rule: "키워드 매칭 (오프라인)",
+    llm: "LLM 단독 평가",
+    hybrid: "Rule 0.4 + LLM 0.6",
+    custom: "사용자 룰 매칭 (오프라인)",
+  };
+  const engineList = engines.length ? engines : ["hybrid"];
+  const engineLabel = engineList.map((id) => ENGINE_LABEL[id] || id).join(" + ");
+  const engineHint = engineList.length > 1
+    ? `선택된 ${engineList.length}개 엔진 점수 평균`
+    : (ENGINE_HINT[engineList[0]] || "");
 
   return (
     <section style={SECTION_CONTAINER_STYLE}>

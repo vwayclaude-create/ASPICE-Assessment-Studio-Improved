@@ -83,7 +83,9 @@ const HistoryRow = ({ entry, isActive, isLast, onView, onDelete, onExportPdf, ex
           letterSpacing: "0.08em",
           textTransform: "uppercase",
         }}>
-          엔진: {entry.engine || "rule"}
+          엔진: {Array.isArray(entry.engines) && entry.engines.length
+            ? entry.engines.join(" + ")
+            : (entry.engine || "rule")}
         </div>
       </div>
       <div style={{ padding: "14px 16px", borderRight: `1px solid ${T.borderL}`, minWidth: 0 }}>

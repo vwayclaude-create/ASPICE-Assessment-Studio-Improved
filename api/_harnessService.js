@@ -10,7 +10,7 @@
 //   _legacyAdapter.js   — ProcessVerdict → legacy UI shape + Koreanization
 
 import { Harness, loadProcess, loadProcesses, loadWorkProducts } from "aspice-harness";
-import { ruleScorer, createLlmScorer, createHybridScorer } from "aspice-harness/evaluators";
+import { ruleScorer, createLlmScorer, createHybridScorer, createCustomScorer } from "aspice-harness/evaluators";
 import { createLlmClient } from "aspice-harness/llm";
 import { indexArtifacts } from "aspice-harness/io";
 import { loadProcessGraph } from "aspice-harness/spec";
@@ -26,11 +26,34 @@ import { buildArtifacts } from "./_artifactBuilder.js";
 import { annotateEvidenceWithPages } from "./_evidencePages.js";
 import { toLegacyShape } from "./_legacyAdapter.js";
 
-// Force hybrid as the contract for both modes. The legacy `engine` field is
-// still accepted for backwards-compat but normalised here so the two modes
-// cannot diverge on scorer choice.
-function resolveEngine(requested) {
-  return requested === "rule" || requested === "llm" ? requested : "hybrid";
+// Recognised scorer engines. Anything unknown normalises to "hybrid" so the
+// two modes (per-process / project) cannot diverge on scorer choice.
+//   rule   — offline auto-keyword/WPID matching
+//   llm    — OpenAI BP/WP/GP scoring
+//   hybrid — 0.4 rule + 0.6 llm (default)
+//   custom — offline, user-authored rule book (see customScorer.js)
+const KNOWN_ENGINES = new Set(["rule", "llm", "hybrid", "custom"]);
+
+/**
+ * Coerce the request body's engine selection into an ordered, deduped list of
+ * known engines. Accepts either the new `engines: [...]` shape or the legacy
+ * `engine: "..."` string. Always returns at least one engine.
+ */
+function resolveEngines(engines, engineLegacy) {
+  const raw = Array.isArray(engines)
+    ? engines
+    : engineLegacy
+      ? [engineLegacy]
+      : [];
+  const seen = new Set();
+  const out = [];
+  for (const id of raw) {
+    if (KNOWN_ENGINES.has(id) && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out.length ? out : ["hybrid"];
 }
 
 // In-process cache of generateJson results, keyed by the full prompt content.
@@ -56,8 +79,14 @@ function memoizeLlmClient(client) {
   };
 }
 
-function buildScorer(engine, apiKey) {
+/** Build a single scorer for one engine id. */
+function buildSingleScorer(engine, apiKey, customRules) {
   if (engine === "rule") return ruleScorer;
+  // Custom is offline: it scores against the user's rule book and falls back
+  // to the auto-keyword rule scorer for practices no rule covers.
+  if (engine === "custom") {
+    return createCustomScorer({ ruleBook: customRules, fallback: ruleScorer });
+  }
   if (!apiKey) {
     throw new Error(`engine=${engine} requires OPENAI_API_KEY in server env.`);
   }
@@ -67,6 +96,69 @@ function buildScorer(engine, apiKey) {
   if (engine === "llm") return llm;
   if (engine === "hybrid") return createHybridScorer({ rule: ruleScorer, llm });
   throw new Error(`Unknown engine: ${engine}`);
+}
+
+const CONTEXT_PRIORITY = { "off-context": 3, partial: 2, consistent: 1, unknown: 0 };
+
+/** Pick the most decisive contextConsistency status across multiple scorer outputs. */
+function mergeContextConsistency(results) {
+  let best = { status: "unknown", note: "" };
+  let bestPrio = -1;
+  for (const r of results) {
+    const c = r?.contextConsistency || { status: "unknown", note: "" };
+    const p = CONTEXT_PRIORITY[c.status] ?? 0;
+    if (p > bestPrio) {
+      bestPrio = p;
+      best = c;
+    }
+  }
+  return best;
+}
+
+/**
+ * Wrap several scorers as one: each method runs every underlying scorer in
+ * parallel and the result's `scorePercent` is the simple average. Evidence and
+ * gaps from every scorer are concatenated with an `[engine]` prefix so the
+ * report still shows what each engine saw. Used when the user picks more than
+ * one engine in the UI.
+ */
+function buildAveragingScorer(scorers) {
+  const merge = (method) => async (ctx) => {
+    const settled = await Promise.allSettled(scorers.map(({ scorer }) => scorer[method](ctx)));
+    const oks = [];
+    const evidence = [];
+    const gaps = [];
+    for (let i = 0; i < settled.length; i++) {
+      const tag = scorers[i].id;
+      const s = settled[i];
+      if (s.status === "fulfilled" && s.value) {
+        oks.push(s.value);
+        for (const e of s.value.evidence ?? []) {
+          evidence.push({ ...e, location: `[${tag}] ${e.location ?? ""}`.trim() });
+        }
+        for (const g of s.value.gaps ?? []) gaps.push(`[${tag}] ${g}`);
+      } else {
+        gaps.push(`[${tag}] failed: ${s.reason?.message ?? "unknown"}`);
+      }
+    }
+    const scorePercent = oks.length
+      ? Math.round(oks.reduce((a, b) => a + (b.scorePercent || 0), 0) / oks.length)
+      : 0;
+    return {
+      scorePercent,
+      evidence,
+      gaps,
+      pamCitation: oks.find((r) => r.pamCitation)?.pamCitation,
+      contextConsistency: mergeContextConsistency(oks),
+    };
+  };
+  return { scoreBP: merge("scoreBP"), scoreWP: merge("scoreWP"), scoreGP: merge("scoreGP") };
+}
+
+function buildScorer(engines, apiKey, customRules) {
+  if (engines.length === 1) return buildSingleScorer(engines[0], apiKey, customRules);
+  const built = engines.map((id) => ({ id, scorer: buildSingleScorer(id, apiKey, customRules) }));
+  return buildAveragingScorer(built);
 }
 
 // Per-process artifact scoping. The BP/WP/GP scorers see only artifacts that
@@ -97,9 +189,49 @@ function filterArtifactsForProcess(processSpec, artifacts) {
 // applies the same artifact scoping in both modes — that is what guarantees
 // that a process scored standalone vs inside a project produces the *same*
 // BP percentages for the same evidence file.
-async function evaluateOneProcess(harness, processSpec, indexedArtifacts) {
+//
+// `extraBPs` is an optional list of user-defined Base Practices that the
+// harness will merge into the process spec's BP list (see Harness#evaluateProcess).
+async function evaluateOneProcess(harness, processSpec, indexedArtifacts, extraBPs = []) {
   const scoped = filterArtifactsForProcess(processSpec, indexedArtifacts);
-  return harness.evaluateProcess({ processId: processSpec.id, artifacts: scoped });
+  return harness.evaluateProcess({
+    processId: processSpec.id,
+    artifacts: scoped,
+    extraBPs,
+  });
+}
+
+/**
+ * Pluck the user's custom BP definitions that apply to one process and
+ * normalise them into the shape the harness BP evaluator expects. Custom BPs
+ * carry an embedded `_customRule` so the CustomScorer scores them against the
+ * user's keywords without the user having to add a separate matching rule.
+ */
+function customBPsForProcess(customRules, processId) {
+  const list = Array.isArray(customRules?.customBPs) ? customRules.customBPs : [];
+  return list
+    .filter((b) => b && (b.processId === processId || b.processId === "*"))
+    .map((b, idx) => {
+      const keywords = (Array.isArray(b.keywords) ? b.keywords : [])
+        .map((k) => String(k).trim())
+        .filter(Boolean)
+        .slice(0, 40);
+      if (!keywords.length) return null;
+      const weight = Number(b.weight);
+      return {
+        id: String(b.id || `${processId}.BP_custom_${idx + 1}`).slice(0, 60),
+        title: String(b.title || "사용자 정의 BP").slice(0, 120),
+        intent: String(b.intent || "").slice(0, 400),
+        pamCitation: "사용자 정의",
+        _custom: true,
+        _customRule: {
+          keywords,
+          match: b.match === "all" ? "all" : "any",
+          weight: Number.isFinite(weight) ? Math.max(0.1, Math.min(5, weight)) : 1,
+        },
+      };
+    })
+    .filter(Boolean);
 }
 
 function rejectIfNoArtifacts(arts, skipped) {
@@ -116,7 +248,7 @@ function rejectIfNoArtifacts(arts, skipped) {
  *   OR legacy: { processId, artifacts: [...], targetLevel, engine }
  * Response: legacy-shape adapter + harness ProcessVerdict.
  */
-export async function handleEvaluate({ processId, artifact, artifacts, targetLevel = 1, engine = "hybrid" }, env) {
+export async function handleEvaluate({ processId, artifact, artifacts, targetLevel = 1, engine, engines, customRules }, env) {
   const inputs = artifacts ?? (artifact ? [artifact] : []);
   const { artifacts: arts, skipped } = await buildArtifacts(inputs);
   rejectIfNoArtifacts(arts, skipped);
@@ -124,14 +256,20 @@ export async function handleEvaluate({ processId, artifact, artifacts, targetLev
   const processSpec = loadProcess(processId);
   if (!processSpec) throw new Error(`Unknown process: ${processId}`);
 
-  const resolved = resolveEngine(engine);
-  const scorer = buildScorer(resolved, env.OPENAI_API_KEY);
+  const resolved = resolveEngines(engines, engine);
+  const scorer = buildScorer(resolved, env.OPENAI_API_KEY, customRules);
   const harness = new Harness({ scorer, targetLevel: Number(targetLevel) });
 
   // Index once up-front so the per-process filter sees wpidCandidates.
   const indexed = indexArtifacts(arts, { wpCatalog: loadWorkProducts() });
-  const verdict = await evaluateOneProcess(harness, processSpec, indexed);
-  verdict.meta = { ...(verdict.meta || {}), skippedArtifacts: skipped, engine: resolved };
+  const extraBPs = resolved.includes("custom") ? customBPsForProcess(customRules, processSpec.id) : [];
+  const verdict = await evaluateOneProcess(harness, processSpec, indexed, extraBPs);
+  verdict.meta = {
+    ...(verdict.meta || {}),
+    skippedArtifacts: skipped,
+    engines: resolved,
+    engine: resolved[0],
+  };
   annotateEvidenceWithPages(verdict, indexed);
   return { legacy: toLegacyShape(verdict, skipped), verdict };
 }
@@ -140,24 +278,32 @@ export async function handleEvaluate({ processId, artifact, artifacts, targetLev
  * Multi-process / project evaluation. Request body:
  *   { processIds, artifacts: [...], targetLevel, engine }
  */
-export async function handleProject({ processIds, artifacts, targetLevel = 1, engine = "hybrid" }, env) {
+export async function handleProject({ processIds, artifacts, targetLevel = 1, engine, engines, customRules }, env) {
   const { artifacts: arts, skipped } = await buildArtifacts(artifacts || []);
   rejectIfNoArtifacts(arts, skipped);
 
-  const resolved = resolveEngine(engine);
-  const scorer = buildScorer(resolved, env.OPENAI_API_KEY);
+  const resolved = resolveEngines(engines, engine);
+  const scorer = buildScorer(resolved, env.OPENAI_API_KEY, customRules);
   const harness = new Harness({ scorer, targetLevel: Number(targetLevel) });
 
   const all = loadProcesses();
   const inScope = processIds?.length ? all.filter((p) => processIds.includes(p.id)) : all;
 
   const indexed = indexArtifacts(arts, { wpCatalog: loadWorkProducts() });
+  const customActive = resolved.includes("custom");
 
   // Evaluate each process with the same per-process artifact scoping that
   // /api/analyze uses. This is what makes project-mode BP percentages match
   // a per-process run on the same evidence.
   const processVerdicts = await Promise.all(
-    inScope.map((proc) => evaluateOneProcess(harness, proc, indexed))
+    inScope.map((proc) =>
+      evaluateOneProcess(
+        harness,
+        proc,
+        indexed,
+        customActive ? customBPsForProcess(customRules, proc.id) : []
+      )
+    )
   );
 
   // Cross-process checks still see the FULL artifact set — they need the
@@ -206,7 +352,8 @@ export async function handleProject({ processIds, artifacts, targetLevel = 1, en
       artifactCount: indexed.length,
       graphSource: graph.source,
       skippedArtifacts: skipped,
-      engine: resolved,
+      engines: resolved,
+      engine: resolved[0],
     },
   };
   annotateEvidenceWithPages(verdict, indexed);

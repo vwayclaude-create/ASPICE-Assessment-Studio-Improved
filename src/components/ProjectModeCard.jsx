@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { T, FONTS, SECTION_CONTAINER_STYLE } from "../theme";
 import { SectionBadge } from "./SectionBadge";
 import { PROCESS_GROUPS } from "../data/processGroups";
@@ -9,6 +10,7 @@ const ENGINE_OPTIONS = [
   { id: "rule",   label: "Rule (오프라인)",     hint: "키워드/WPID 매칭, 무료" },
   { id: "llm",    label: "LLM (OpenAI)",        hint: "BP/WP/GP 각 호출" },
   { id: "hybrid", label: "Hybrid (0.4 rule + 0.6 llm)", hint: "기본 권장" },
+  { id: "custom", label: "Custom (사용자 룰)",  hint: "직접 만든 룰로 평가, 무료" },
 ];
 
 export function ProjectModeCard({
@@ -23,14 +25,17 @@ export function ProjectModeCard({
   onToggleGroupProcesses,
   targetLevel,
   onChangeLevel,
-  engine,
-  onChangeEngine,
+  engines,
+  onToggleEngine,
+  customRuleStats,
+  onEditCustomRules,
   running,
   phase,
   error,
   onRun,
   onCancel,
 }) {
+  const engineSet = new Set(engines || []);
   const [fileError, setFileError] = useState("");
   const [selectMode, setSelectMode] = useState("files"); // "files" | "folder"
   const filesInputRef = useRef(null);
@@ -211,25 +216,60 @@ export function ProjectModeCard({
           </div>
         </div>
         <div style={FIELD}>
-          <label style={LABEL}>Scorer 엔진</label>
+          <label style={LABEL}>
+            Scorer 엔진 ({engines.length}개 선택 · 다중 선택 시 점수 평균)
+          </label>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-            {ENGINE_OPTIONS.map((e) => (
-              <label key={e.id} style={ENG_OPT}>
-                <input
-                  type="radio"
-                  name="engine"
-                  value={e.id}
-                  checked={engine === e.id}
-                  onChange={() => onChangeEngine(e.id)}
-                  disabled={running}
-                />
-                <div>
-                  <div style={{ color: T.textHi, fontSize: 13 }}>{e.label}</div>
-                  <div style={{ color: T.textLo, fontSize: 11 }}>{e.hint}</div>
-                </div>
-              </label>
-            ))}
+            {ENGINE_OPTIONS.map((e) => {
+              const checked = engineSet.has(e.id);
+              const isLast = engineSet.size === 1 && checked;
+              return (
+                <label key={e.id} style={ENG_OPT}>
+                  <input
+                    type="checkbox"
+                    value={e.id}
+                    checked={checked}
+                    onChange={() => onToggleEngine(e.id)}
+                    disabled={running || isLast}
+                    title={isLast ? "최소 한 개 엔진은 선택되어 있어야 합니다." : ""}
+                  />
+                  <div>
+                    <div style={{ color: T.textHi, fontSize: 13 }}>{e.label}</div>
+                    <div style={{ color: T.textLo, fontSize: 11 }}>{e.hint}</div>
+                  </div>
+                </label>
+              );
+            })}
           </div>
+          {engineSet.has("custom") && (
+            <button
+              type="button"
+              onClick={onEditCustomRules}
+              disabled={running}
+              style={{
+                marginTop: 8,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "7px 12px",
+                background: T.accentSoft,
+                color: T.accent,
+                border: `1px solid ${T.accent}`,
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: running ? "not-allowed" : "pointer",
+              }}
+            >
+              <SlidersHorizontal size={13} />
+              평가 룰 · 사용자 BP 편집
+              {customRuleStats && (
+                <span style={{ color: T.textLo, fontWeight: 400 }}>
+                  (룰 {customRuleStats.enabled}/{customRuleStats.total} · BP {customRuleStats.customBPs}개)
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
