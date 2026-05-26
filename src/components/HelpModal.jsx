@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { X, Upload, FolderTree, Play, FileText, History, Lightbulb, Layers, GitBranch, Target, Sliders, Plus, ListChecks, ToggleRight, Download, Link2, CheckCheck } from "lucide-react";
 import { T, FONTS } from "../theme";
+import { exportHelpGuideAsPdf } from "../utils/exportHelpGuide";
 
 const SectionTitle = ({ children }) => (
   <div style={{
@@ -99,7 +101,23 @@ const Code = ({ children }) => (
   }}>{children}</code>
 );
 
-export const HelpModal = ({ onClose }) => (
+export const HelpModal = ({ onClose, mode }) => {
+  const [exporting, setExporting] = useState(false);
+  const pdfMode = mode === "project" ? "project" : "process";
+  const pdfLabel = pdfMode === "project" ? "프로젝트 모드 PDF" : "프로세스 모드 PDF";
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportHelpGuideAsPdf({ mode: pdfMode });
+    } catch (err) {
+      console.error("[aspice/help-pdf] export failed", err);
+      alert("PDF 내보내기에 실패했습니다. 콘솔 로그를 확인해주세요.");
+    } finally {
+      setExporting(false);
+    }
+  };
+  return (
   <div
     onClick={onClose}
     style={{
@@ -464,8 +482,36 @@ export const HelpModal = ({ onClose }) => (
         padding: "16px 32px",
         borderTop: `1px solid ${T.borderL}`,
         display: "flex",
-        justifyContent: "flex-end",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
       }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            style={{
+              background: "transparent",
+              color: T.textHi,
+              border: `1px solid ${T.borderM}`,
+              padding: "9px 14px",
+              fontFamily: FONTS.mono,
+              fontSize: 10.5,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              cursor: exporting ? "not-allowed" : "pointer",
+              borderRadius: 4,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+            }}
+          >
+            <Download size={13} />
+            {exporting ? "Exporting…" : pdfLabel}
+          </button>
+        </div>
         <button
           onClick={onClose}
           style={{
@@ -487,4 +533,5 @@ export const HelpModal = ({ onClose }) => (
       </div>
     </div>
   </div>
-);
+  );
+};

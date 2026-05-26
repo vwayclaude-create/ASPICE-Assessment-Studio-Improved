@@ -1,4 +1,4 @@
-import { Trash2, Upload, Eye } from "lucide-react";
+import { Trash2, Upload, Eye, FileDown, Loader2 } from "lucide-react";
 import { T, FONTS } from "../theme";
 import { countRatings, isCl1Pass } from "../data/ratingMeta";
 import { HistoryListShell } from "./HistoryListShell";
@@ -7,7 +7,7 @@ const GRID_TEMPLATE = "180px 1fr 1.4fr 110px";
 const HISTORY_COLOR = "#A78BFA";
 const HEADER_COLUMNS = ["분석일자", "Import 파일", "평가 · 분석 보고서", "Action"];
 
-const HistoryRow = ({ entry, isActive, isLast, onView, onDelete }) => {
+const HistoryRow = ({ entry, isActive, isLast, onView, onDelete, onExportPdf, exporting }) => {
   const counts = countRatings(entry.results.ratings);
   const fCount = counts.F || 0;
   const lCount = (counts.L || 0) + (counts["L+"] || 0) + (counts["L-"] || 0);
@@ -144,6 +144,32 @@ const HistoryRow = ({ entry, isActive, isLast, onView, onDelete }) => {
           <Eye size={11}/> {isActive ? "닫기" : "보기"}
         </button>
         <button
+          onClick={onExportPdf}
+          disabled={exporting}
+          title="이 분석 결과를 PDF로 내보내기"
+          style={{
+            background: exporting ? T.borderL : "transparent",
+            color: T.textHi,
+            border: `1px solid ${T.borderM}`,
+            padding: "5px 10px",
+            fontFamily: FONTS.mono,
+            fontSize: 9,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            cursor: exporting ? "wait" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 5,
+            borderRadius: 3,
+            fontWeight: 600,
+            opacity: exporting ? 0.7 : 1,
+          }}
+        >
+          {exporting ? <Loader2 size={9} className="anim-spin" /> : <FileDown size={9} />}
+          {exporting ? "생성 중" : "PDF"}
+        </button>
+        <button
           onClick={onDelete}
           style={{
             background: "transparent",
@@ -175,6 +201,8 @@ export const HistoryCard = ({
   onToggleView,
   onDeleteEntry,
   onClearAll,
+  onExportEntryPdf,
+  exportingEntryId,
 }) => (
   <HistoryListShell
     accentColor={HISTORY_COLOR}
@@ -196,6 +224,8 @@ export const HistoryCard = ({
         isLast={isLast}
         onView={() => onToggleView(h.id)}
         onDelete={() => onDeleteEntry(h.id)}
+        onExportPdf={() => onExportEntryPdf?.(h)}
+        exporting={exportingEntryId === h.id}
       />
     )}
   />

@@ -1,10 +1,10 @@
-import { X } from "lucide-react";
+import { X, FileDown, Loader2 } from "lucide-react";
 import { T, FONTS, SECTION_CONTAINER_STYLE } from "../theme";
 import { SectionBadge } from "./SectionBadge";
 import { RATING_META } from "../data/ratingMeta";
 import { condenseGap as condenseGapShared } from "../utils/gapText";
 
-export function ProjectReportCard({ verdict, onClose }) {
+export function ProjectReportCard({ verdict, onClose, onExportPdf, exporting = false }) {
   if (!verdict) return null;
   const { processes = [], crossProcess = {}, meta = {} } = verdict;
   const { traceMatrices = [], consistency = [], coverage, changes, graph } = crossProcess;
@@ -13,34 +13,71 @@ export function ProjectReportCard({ verdict, onClose }) {
   return (
     <section style={{ ...SECTION_CONTAINER_STYLE, position: "relative" }}>
       <SectionBadge>06 · 프로젝트 리포트</SectionBadge>
-      {onClose && (
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="리포트 닫기"
-          title="리포트 닫기"
-          style={{
-            position: "absolute",
-            top: 14,
-            right: 14,
-            background: "transparent",
-            color: T.textMd,
-            border: `1px solid ${T.borderM}`,
-            padding: "6px 10px",
-            fontFamily: FONTS.mono,
-            fontSize: 10,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            borderRadius: 3,
-            fontWeight: 600,
-          }}
-        >
-          <X size={11} /> 닫기
-        </button>
+      {(onClose || onExportPdf) && (
+        <div style={{
+          position: "absolute",
+          top: 14,
+          right: 14,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}>
+          {onExportPdf && (
+            <button
+              type="button"
+              onClick={onExportPdf}
+              disabled={exporting}
+              aria-label="이 리포트를 PDF로 내보내기"
+              title="이 리포트를 PDF로 내보내기"
+              style={{
+                background: exporting ? T.borderL : "transparent",
+                color: T.textHi,
+                border: `1px solid ${T.borderM}`,
+                padding: "6px 10px",
+                fontFamily: FONTS.mono,
+                fontSize: 10,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                cursor: exporting ? "wait" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                borderRadius: 3,
+                fontWeight: 600,
+                opacity: exporting ? 0.7 : 1,
+              }}
+            >
+              {exporting ? <Loader2 size={11} className="anim-spin" /> : <FileDown size={11} />}
+              {exporting ? "생성 중" : "PDF 출력하기"}
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="리포트 닫기"
+              title="리포트 닫기"
+              style={{
+                background: "transparent",
+                color: T.textMd,
+                border: `1px solid ${T.borderM}`,
+                padding: "6px 10px",
+                fontFamily: FONTS.mono,
+                fontSize: 10,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                borderRadius: 3,
+                fontWeight: 600,
+              }}
+            >
+              <X size={11} /> 닫기
+            </button>
+          )}
+        </div>
       )}
       <h2 style={H2}>ASPICE 프로젝트 평가</h2>
       <div style={{ color: T.textLo, fontSize: 11, marginBottom: 20 }}>

@@ -80,6 +80,7 @@ export default function SolutionApp() {
   };
   const [selectedProjectHistoryId, setSelectedProjectHistoryId] = useState(null);
   const [exportingProjectEntryId, setExportingProjectEntryId] = useState(null);
+  const [exportingHistoryEntryId, setExportingHistoryEntryId] = useState(null);
   const [customRulesOpen, setCustomRulesOpen] = useState(false);
 
   // Custom-scorer rule book — persisted in IndexedDB, shared by both modes.
@@ -246,6 +247,32 @@ export default function SolutionApp() {
     }
   };
 
+  // 이력 행에서 PDF 버튼을 누르면, 해당 이력을 잠시 본문에 띄워 VerdictCard 가
+  // reportRef 에 마운트되도록 한 뒤 캡처한다. 캡처가 끝나면 이전 선택 상태로 복원한다.
+  const handleExportHistoryEntryPdf = async (entry) => {
+    if (!entry?.results) {
+      alert("PDF로 내보낼 결과 데이터가 비어있습니다.");
+      return;
+    }
+    if (exportingHistoryEntryId) return;
+    const prevSelectedId = selectedHistoryId;
+    const wasAlreadyOpen = prevSelectedId === entry.id;
+    setExportingHistoryEntryId(entry.id);
+    try {
+      if (!wasAlreadyOpen) setSelectedHistoryId(entry.id);
+      // 두 RAF 를 기다려야 VerdictCard 가 새 결과로 마운트/레이아웃을 마친다.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (!reportRef.current) throw new Error("리포트 노드를 찾을 수 없습니다.");
+      const procForExport = ASPICE_DATA[entry.processId] || displayProc;
+      await exportReportAsPdf({ proc: procForExport, node: reportRef.current });
+    } catch (e) {
+      alert(`PDF 생성 실패: ${e.message || e}`);
+    } finally {
+      setExportingHistoryEntryId(null);
+      if (!wasAlreadyOpen) setSelectedHistoryId(prevSelectedId);
+    }
+  };
+
   const handleExportTxt = () => {
     if (!displayResults) return;
     exportReportAsText({
@@ -393,6 +420,8 @@ export default function SolutionApp() {
                   onToggleView={handleHistoryToggle}
                   onDeleteEntry={handleHistoryDelete}
                   onClearAll={handleHistoryClearAll}
+                  onExportEntryPdf={handleExportHistoryEntryPdf}
+                  exportingEntryId={exportingHistoryEntryId}
                 />
 
                 {displayResults && (
@@ -487,6 +516,24 @@ export default function SolutionApp() {
                       project.clear();
                     }
                   }}
+                  onExportPdf={() => {
+                    const entry = viewingProjectHistory ?? {
+                      ...buildProjectHistoryEntry({
+                        verdict: displayProjectVerdict,
+                        artifacts: projectArtifacts,
+                        processIds: projectProcessIds,
+                        targetLevel: projectTargetLevel,
+                        engines: projectEngines,
+                      }),
+                      id: "__current__",
+                    };
+                    return handleExportProjectEntryPdf(entry);
+                  }}
+                  exporting={
+                    viewingProjectHistory
+                      ? exportingProjectEntryId === viewingProjectHistory.id
+                      : exportingProjectEntryId === "__current__"
+                  }
                 />
               </div>
             )}
@@ -516,7 +563,7 @@ export default function SolutionApp() {
         />
       )}
 
-      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HelpModal mode={mode === MODE_PROJECT ? "project" : "process"} onClose={() => setHelpOpen(false)} />}
 
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
 
