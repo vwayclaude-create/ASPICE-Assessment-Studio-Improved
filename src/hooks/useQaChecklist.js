@@ -6,6 +6,7 @@ import {
   buildVersion,
   confirmItem,
   unconfirmItem,
+  relinkCheck,
 } from "aspice-harness/qa";
 import { idbGet, idbSet } from "../utils/idb";
 import { useAuth } from "../auth/useAuth";
@@ -62,6 +63,12 @@ const mapItems = (version, kind, key, fn) => {
   const [field, keyField] = KIND[kind];
   return { ...version, [field]: version[field].map((it) => (it[keyField] === key ? fn(it) : it)) };
 };
+
+// processId change: confirmed work no longer matches, so it needs re-confirmation.
+const reassign = (it, processId) =>
+  it.processId === processId
+    ? it
+    : { ...it, processId, status: it.status === "confirmed" ? "stale" : it.status };
 
 /**
  * QA Audit checklist store: one set per browser (IndexedDB key
@@ -228,10 +235,11 @@ export function useQaChecklist() {
         },
       };
       if (cur) {
-        const nv = {
+        // Linked process items follow a newly stale wp item (spec 6.4 step 4).
+        const nv = relinkCheck({
           ...cur,
-          wpItems: cur.wpItems.map((w) => (w.sheet === sheetName ? { ...w, processId } : w)),
-        };
+          wpItems: cur.wpItems.map((w) => (w.sheet === sheetName ? reassign(w, processId) : w)),
+        });
         next.versions = s.versions.map((v) => (v.id === cur.id ? nv : v));
       }
       return commit(next);
@@ -253,9 +261,7 @@ export function useQaChecklist() {
       if (cur) {
         const nv = {
           ...cur,
-          processItems: cur.processItems.map((p) =>
-            p.processName === name ? { ...p, processId } : p
-          ),
+          processItems: cur.processItems.map((p) => (p.processName === name ? reassign(p, processId) : p)),
         };
         next.versions = s.versions.map((v) => (v.id === cur.id ? nv : v));
       }
@@ -264,8 +270,24 @@ export function useQaChecklist() {
     [commit]
   );
 
+  // Only { processId } is editable here; other fields go through confirm/unconfirm.
   const updateItem = useCallback(
-    (kind, key, patch) => updateActive((v) => mapItems(v, kind, key, (it) => ({ ...it, ...patch }))),
+    (kind, key, patch) => {
+      if (!patch || !Object.prototype.hasOwnProperty.call(patch, "processId")) return Promise.resolve(false);
+      const processId = patch.processId || null;
+      return updateActive((v) => {
+        let unset = false;
+        const nv = mapItems(v, kind, key, (it) => {
+          // Confirmed / stale items keep a process (the editor offers no 미지정).
+          if (processId === null && (it.status === "confirmed" || it.status === "stale")) {
+            unset = true;
+            return it;
+          }
+          return reassign(it, processId);
+        });
+        return unset ? v : kind === "wp" ? relinkCheck(nv) : nv;
+      });
+    },
     [updateActive]
   );
 

@@ -48,10 +48,12 @@ const emptyForm = (kind) =>
     ? { criteria: [], polarity: "positive", targetLocations: [], relatedBPs: [], severity: "중" }
     : { linkedWpCheckIds: [], relatedBPs: [], aggregation: "default" };
 
-const initialForm = (kind, item) => ({
-  ...emptyForm(kind),
-  ...structuredClone(item.confirmed ?? item.draft ?? {}),
-});
+// rationale is reference text only, never part of the form.
+const formFrom = (kind, src) => {
+  const { rationale: _drop, ...rest } = structuredClone(src ?? {});
+  return { ...emptyForm(kind), ...rest };
+};
+const initialForm = (kind, item) => formFrom(kind, item.confirmed ?? item.draft);
 
 function Chip({ text, bad, onRemove }) {
   return (
@@ -187,14 +189,17 @@ export function ChecklistItemEditor({ qa, kind, item, draftRunner }) {
   const key = kind === "wp" ? item.checkId : item.itemId;
   const [form, setForm] = useState(() => initialForm(kind, item));
   // Re-seed when another item opens or its draft/confirmed content is replaced
-  // (state derived from props, adjusted during render).
+  // (state derived from props, adjusted during render). A new draft for the
+  // same item (re-draft finished) seeds from that draft even if confirmed.
   const [seed, setSeed] = useState({ key, draft: item.draft, confirmed: item.confirmed });
   if (seed.key !== key || seed.draft !== item.draft || seed.confirmed !== item.confirmed) {
+    const redrafted = seed.key === key && seed.draft !== item.draft && item.draft;
     setSeed({ key, draft: item.draft, confirmed: item.confirmed });
-    setForm(initialForm(kind, item));
+    setForm(redrafted ? formFrom(kind, item.draft) : initialForm(kind, item));
   }
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const settled = item.status === "confirmed" || item.status === "stale";
   const rationale = item.draft?.rationale;
   const wpIds = useMemo(() => new Set(version.wpItems.map((w) => w.checkId)), [version]);
   const check =
@@ -237,7 +242,8 @@ export function ChecklistItemEditor({ qa, kind, item, draftRunner }) {
         onChange={(e) => qa.updateItem(kind, key, { processId: e.target.value || null })}
         style={input}
       >
-        <option value="">미지정</option>
+        {/* Confirmed / stale items can move to another process (-> stale) but not to 미지정. */}
+        {(!settled || !item.processId) && <option value="" disabled={settled}>미지정</option>}
         {PROCESS_OPTIONS.map((p) => (
           <option key={p.id} value={p.id}>{p.id} {p.name}</option>
         ))}
@@ -339,7 +345,7 @@ export function ChecklistItemEditor({ qa, kind, item, draftRunner }) {
         >
           {draftRunner.running ? "만드는 중..." : "초안 다시 만들기"}
         </button>
-        {item.status === "confirmed" && (
+        {settled && (
           <button type="button" style={btn} onClick={() => qa.unconfirm(kind, key)}>확정 취소</button>
         )}
       </div>

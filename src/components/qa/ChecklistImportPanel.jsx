@@ -70,7 +70,8 @@ function groupCounts(items, keyOf) {
   return [...m.entries()];
 }
 
-function ProgressTable({ title, rows }) {
+// extra: optional { title, cell(key) } column after the row label.
+function ProgressTable({ title, rows, extra }) {
   if (!rows.length) return null;
   return (
     <div style={{ overflowX: "auto", marginBottom: 12 }}>
@@ -78,6 +79,7 @@ function ProgressTable({ title, rows }) {
         <thead>
           <tr>
             <th style={th}>{title}</th>
+            {extra && <th style={th}>{extra.title}</th>}
             {STATUSES.map((s) => (
               <th key={s} style={th}>{STATUS_LABEL[s]}</th>
             ))}
@@ -88,6 +90,7 @@ function ProgressTable({ title, rows }) {
           {rows.map(([k, c]) => (
             <tr key={k}>
               <td style={td}>{k}</td>
+              {extra && <td style={td}>{extra.cell(k)}</td>}
               {STATUSES.map((s) => (
                 <td key={s} style={td}>{c[s]}</td>
               ))}
@@ -127,6 +130,11 @@ export function ChecklistImportPanel({ qa }) {
   const sheetsNeeding = active
     ? [...new Set(active.wpItems.filter((w) => !w.processId).map((w) => w.sheet))]
     : [];
+  // Sheet's current process: shared processId of its items, "" if mixed or unset.
+  const sheetProcess = (sheet) => {
+    const ids = new Set(active.wpItems.filter((w) => w.sheet === sheet).map((w) => w.processId ?? ""));
+    return ids.size === 1 ? [...ids][0] : "";
+  };
   const namesNeeding = active
     ? [...new Set(active.processItems.filter((p) => !p.processId).map((p) => p.processName))]
     : [];
@@ -239,7 +247,14 @@ export function ChecklistImportPanel({ qa }) {
       {active && (
         <section style={card}>
           <h3 style={h}>진행 현황 · 확정률 {confirmRate(active)}%</h3>
-          <ProgressTable title="산출물 시트" rows={groupCounts(active.wpItems, (w) => w.sheet)} />
+          <ProgressTable
+            title="산출물 시트"
+            rows={groupCounts(active.wpItems, (w) => w.sheet)}
+            extra={{
+              title: "프로세스",
+              cell: (sheet) => <ProcessSelect value={sheetProcess(sheet)} onChange={(id) => qa.setSheetProcess(sheet, id)} />,
+            }}
+          />
           <ProgressTable title="프로세스" rows={groupCounts(active.processItems, (p) => p.processId ?? p.processName)} />
         </section>
       )}

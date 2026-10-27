@@ -144,9 +144,12 @@ export function ChecklistItemTable({ qa }) {
     const wpIds = new Set(version.wpItems.map((w) => w.checkId));
     let done = 0;
     let skipped = 0;
+    let staleSkipped = 0;
     for (const it of items) {
       const k = keyOf(kind, it);
       if (!checked.has(k)) continue;
+      // Stale items need a person to look again; never overwrite them with the draft.
+      if (it.status === "stale") { staleSkipped++; continue; }
       const d = it.draft;
       if (!d || it.status === "confirmed") { skipped++; continue; }
       const { rationale: _drop, ...criteria } = d;      const res = kind === "wp"
@@ -156,7 +159,10 @@ export function ChecklistItemTable({ qa }) {
       if (await qa.confirm(kind, k, criteria)) done++;
       else skipped++;
     }
-    setNotice(`${done}건 확정, ${skipped}건 제외 (초안이 없거나 확정 조건 미충족, 이미 확정된 항목)`);
+    setNotice(
+      `${done}건 확정, ${skipped}건 제외 (초안이 없거나 확정 조건 미충족, 이미 확정된 항목)` +
+        (staleSkipped ? `, ${staleSkipped}건은 재확인 필요라 건너뜀` : "")
+    );
     setChecked(new Set());
   };
 

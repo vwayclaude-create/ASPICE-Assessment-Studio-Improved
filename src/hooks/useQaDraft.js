@@ -3,7 +3,7 @@ import { processes } from "aspice-harness/spec/all";
 import { wpCandidatesFor } from "aspice-harness/qa";
 
 const ENDPOINT = "/api/qa-draft";
-const CHUNK = 200; // server limit per request
+const CHUNK = 40; // per request: 2 server batches of 20, well inside the 60 s function limit
 const NEED_PROCESS = "프로세스 지정 필요";
 
 const KINDS = {
@@ -22,8 +22,10 @@ function inScope(kind, item, scope) {
 
 /**
  * AI draft runner for QA Audit. Builds flat per-item entries, splits them into
- * requests of at most 200, POSTs them in order and applies every successful
+ * requests of at most CHUNK, POSTs them in order and applies every successful
  * chunk right away via qa.applyDrafts (so progress survives a later failure).
+ * A failed chunk marks only its own items failed; later chunks still run.
+ * Unmount aborts the in-flight request and nothing is applied afterwards.
  *
  * run({ kind: "wp"|"process"|"both", scope, includeConfirmed = false })
  */
@@ -34,6 +36,7 @@ export function useQaDraft(qa) {
   const aliveRef = useRef(true);
   const runningRef = useRef(false);
   const qaRef = useRef(qa);
+  const abortRef = useRef(null);
 
   useEffect(() => {
     qaRef.current = qa;
@@ -43,6 +46,7 @@ export function useQaDraft(qa) {
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
+      abortRef.current?.abort();
     };
   }, []);
 
@@ -50,6 +54,8 @@ export function useQaDraft(qa) {
     const version = qaRef.current.active;
     if (!version || runningRef.current) return;
     runningRef.current = true;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     const safe = (fn) => aliveRef.current && fn();
     const fail = {};
     const kinds = kind === "both" ? ["wp", "process"] : [kind];
@@ -90,35 +96,33 @@ export function useQaDraft(qa) {
     });
 
     let done = 0;
-    let fatal = null;
     try {
       for (const job of jobs) {
-        if (fatal) {
-          for (const g of job.groups) fail[g.key] = fatal;
-          continue;
-        }
+        if (!aliveRef.current) break;
         try {
           const res = await fetch(ENDPOINT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ kind: job.kind, groups: job.groups }),
+            signal: ctrl.signal,
           });
           const body = await res.json().catch(() => ({}));
+          // Unmounted while waiting: never write a snapshot-based result.
+          if (!aliveRef.current) break;
           if (!res.ok) {
             const m = [body.error, body.detail].filter(Boolean).join(": ") || `HTTP ${res.status}`;
-            fatal = m;
             for (const g of job.groups) fail[g.key] = m;
-            continue;
-          }
-          Object.assign(fail, body.failures ?? {});
-          const results = body.results ?? {};
-          if (Object.keys(results).length) {
-            const ok = await qaRef.current.applyDrafts(job.kind, results);
-            if (!ok) for (const k of Object.keys(results)) fail[k] = "초안을 저장하지 못했습니다";
+          } else {
+            Object.assign(fail, body.failures ?? {});
+            const results = body.results ?? {};
+            if (Object.keys(results).length) {
+              const ok = await qaRef.current.applyDrafts(job.kind, results);
+              if (!ok) for (const k of Object.keys(results)) fail[k] = "초안을 저장하지 못했습니다";
+            }
           }
         } catch (e) {
+          if (!aliveRef.current) break;
           const m = `요청 실패: ${e?.message || e}`;
-          fatal = m;
           for (const g of job.groups) fail[g.key] = m;
         }
         done += job.groups.length;
@@ -129,6 +133,7 @@ export function useQaDraft(qa) {
       }
     } finally {
       runningRef.current = false;
+      if (abortRef.current === ctrl) abortRef.current = null;
       safe(() => {
         setFailures({ ...fail });
         setProgress({ done: total, total });
