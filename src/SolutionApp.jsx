@@ -39,7 +39,8 @@ import { ProjectModeCard } from "./components/ProjectModeCard";
 import { CustomRulesModal } from "./components/CustomRulesModal";
 import { ProjectReportCard } from "./components/ProjectReportCard";
 import { ProjectHistoryCard } from "./components/ProjectHistoryCard";
-import { ModeToggle, MODE_PER_PROCESS, MODE_PROJECT } from "./components/ModeToggle";
+import { ModeToggle, MODE_PER_PROCESS, MODE_PROJECT, MODE_QA_AUDIT } from "./components/ModeToggle";
+import { QaAuditView } from "./components/qa/QaAuditView";
 import { UserMenu } from "./auth/UserMenu";
 import { ProfileModal } from "./auth/ProfileModal";
 
@@ -549,6 +550,8 @@ export default function SolutionApp() {
             <AppFooter />
           </main>
         )}
+
+        {mode === MODE_QA_AUDIT && <QaAuditView />}
       </div>
 
       <GlobalStyles />
