@@ -4,3 +4,4 @@ export * from "./importWpChecklist.js";
 export * from "./importProcessChecklist.js";
 export * from "./confirm.js";
 export * from "./mergeVersion.js";
+export * from "./draft.js";
