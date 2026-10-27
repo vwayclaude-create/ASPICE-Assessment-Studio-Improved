@@ -135,3 +135,18 @@ test("sanitize: processId를 주면 그 프로세스 BP만 남김", () => {
   assert.deepEqual(sanitizeWpDraft(rawWp({ relatedBPs: ["MAN.3.BP5", "SYS.2.BP1"] }), { processes: P, processId: "MAN.3" }).relatedBPs, ["MAN.3.BP5"]);
   assert.deepEqual(sanitizeProcessDraft({ relatedBPs: ["SYS.2.BP1"] }, { processes: P, candidateIds: new Set(), processId: "MAN.3" }).relatedBPs, []);
 });
+
+test("basis: wp/process prompts carry it as a hint; generateDrafts passes it through", async () => {
+  const bps = bpCatalog(P, "HWE.2");
+  const p = buildWpDraftPrompt({ workProduct: "w", processId: "HWE.2", bps, items: [{ id: "CH-1", question: "q", basis: "HWE.2.BP1 / 04-52" }] });
+  assert.ok(p.task.includes("근거: HWE.2.BP1 / 04-52"));
+  assert.ok(!buildWpDraftPrompt({ workProduct: "w", processId: "HWE.2", bps, items: [{ id: "CH-1", question: "q", basis: "" }] }).task.includes("근거:"));
+  const q = buildProcessDraftPrompt({ processId: "ACQ.4", bps: [], items: [{ id: "QA-1", question: "q", basis: "ACQ.4.BP1: Agree" }], candidates: [] });
+  assert.ok(q.task.includes("참고: ACQ.4.BP1: Agree"));
+  const tasks = [];
+  const client = { async generateJson({ task }) { tasks.push(task); return { parsed: { items: [{ ...okItem("CH-0"), relatedBPs: ["MAN.3.BP1", "SYS.2.BP1"] }] } }; } };
+  const r = await generateDrafts({ client, kind: "wp", processes: P,
+    groups: [{ key: "CH-0", workProduct: "w", processId: "MAN.3", question: "q", basis: "SYS.2.BP1" }] });
+  assert.ok(tasks[0].includes("근거: SYS.2.BP1"));
+  assert.deepEqual(r.results["CH-0"].relatedBPs, ["MAN.3.BP1"]);
+});

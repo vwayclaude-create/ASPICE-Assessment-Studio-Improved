@@ -1,4 +1,5 @@
 export * from "./processNameMap.js";
+export * from "./headerDetect.js";
 export * from "./readWorkbook.js";
 export * from "./importWpChecklist.js";
 export * from "./importProcessChecklist.js";

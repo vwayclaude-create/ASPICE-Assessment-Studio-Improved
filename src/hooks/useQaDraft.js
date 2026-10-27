@@ -71,7 +71,8 @@ export function useQaDraft(qa) {
           fail[it[key]] = NEED_PROCESS;
           continue;
         }
-        const e = { key: it[key], processId: it.processId, question: it.question };
+        // basis: the Excel 근거/참고 text, a hint for relatedBPs only.
+        const e = { key: it[key], processId: it.processId, question: it.question, basis: it.basis ?? "" };
         if (k === "wp") {
           e.workProduct = it.workProduct;
           e.area = it.area;

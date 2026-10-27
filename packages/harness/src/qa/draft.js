@@ -29,6 +29,7 @@ export function buildWpDraftPrompt({ workProduct, processId, bps, items }) {
     "- 질문이 부정형이라 '예'가 위반을 뜻하면 polarity=negative, 그 외에는 positive. (예: '오타가 존재하는가?'는 negative)",
     "- targetLocations: 산출물에서 확인할 예상 절·표 이름.",
     "- relatedBPs: 반드시 아래 제공된 BP 목록의 ID만 사용. 관련 없으면 빈 배열.",
+    "- 항목에 근거(엑셀의 BP/OII 표기)가 있으면 relatedBPs를 고르는 힌트로만 쓰고, 목록 밖 ID는 쓰지 않습니다.",
     "- severity: 상, 중, 하 중 하나.",
     "- rationale: 한 문장.",
     "입력의 모든 id에 대해 하나씩 답하고, JSON만 출력합니다.",
@@ -37,7 +38,9 @@ export function buildWpDraftPrompt({ workProduct, processId, bps, items }) {
   const context = `산출물: ${workProduct}\n프로세스: ${processId}\n\nBP 목록:\n${bpLines(bps)}`;
   const task =
     "다음 항목의 판정 기준 초안을 작성하세요.\n" +
-    items.map((it) => `- id: ${it.id}${it.area ? ` / 영역: ${it.area}` : ""} / question: ${it.question}`).join("\n");
+    items.map((it) =>
+      `- id: ${it.id}${it.area ? ` / 영역: ${it.area}` : ""}${it.basis ? ` / 근거: ${it.basis}` : ""} / question: ${it.question}`
+    ).join("\n");
   return { system, context, task };
 }
 
@@ -47,6 +50,7 @@ export function buildProcessDraftPrompt({ processId, bps, items, candidates }) {
     "프로세스 심사 항목마다, 그 항목을 판정할 때 근거가 되는 산출물 체크 항목을 후보 중에서 고릅니다.",
     "- linkedWpCheckIds: 반드시 후보 목록의 checkId만 사용.",
     "- relatedBPs: 반드시 제공된 BP 목록의 ID만 사용. 관련 없으면 빈 배열.",
+    "- 항목에 참고(엑셀의 BP 표기)가 있으면 relatedBPs를 고르는 힌트로만 쓰고, 목록 밖 ID는 쓰지 않습니다.",
     "- rationale: 한 문장.",
     "입력의 모든 id에 대해 하나씩 답하고, JSON만 출력합니다.",
     '형식: {"items":[{"id":"...","linkedWpCheckIds":["..."],"relatedBPs":["MAN.3.BP5"],"rationale":"..."}]}',
@@ -57,7 +61,7 @@ export function buildProcessDraftPrompt({ processId, bps, items, candidates }) {
   const context = `프로세스: ${processId}\n\nBP 목록:\n${bpLines(bps)}\n\n산출물 항목 후보:\n${cand}`;
   const task =
     "다음 프로세스 심사 항목의 초안을 작성하세요.\n" +
-    items.map((it) => `- id: ${it.id} / question: ${it.question}`).join("\n");
+    items.map((it) => `- id: ${it.id}${it.basis ? ` / 참고: ${it.basis}` : ""} / question: ${it.question}`).join("\n");
   return { system, context, task };
 }
 
@@ -122,7 +126,7 @@ export async function generateDrafts({ client, kind, groups, processes, batchSiz
   await Promise.all(batches.map(async (batch) => {
     const first = batch[0];
     const bps = bpCatalog(processes, first.processId);
-    const items = batch.map((g) => ({ id: g.key, area: g.area, question: g.question }));
+    const items = batch.map((g) => ({ id: g.key, area: g.area, basis: g.basis ?? "", question: g.question }));
     let candidates = [];
     if (kind === "process") {
       const seen = new Map();

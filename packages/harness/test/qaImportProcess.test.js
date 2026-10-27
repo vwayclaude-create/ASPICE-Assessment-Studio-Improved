@@ -81,3 +81,43 @@ test("two distinct unknown process names both import with distinct ids", () => {
   assert.deepEqual(out.items.map((i) => i.itemId), ["QA-UNMAPPED-001", "QA-UNMAPPED-002"]);
   assert.ok(!out.issues.some((x) => /중복/.test(x.message)));
 });
+
+// ---- VWAY variants (spec 3.3) ----
+test("4.1 process sheet: real ids, (ACQ.4) parens, group/total rows and CL2/요약 skipped silently", () => {
+  const out = importProcessChecklist(readWorkbook(readFileSync(fx("process_41.xlsx"))), { fileName: "process_41.xlsx" });
+  assert.deepEqual(out.sheetNames, ["통합 프로세스 감사"]);
+  assert.deepEqual(out.issues, []);
+  assert.deepEqual(out.items.map((i) => i.itemId), ["QA-ACQ4-001", "QA-ACQ4-002", "QA-SPL2-001", "QA-SPL2-002"]);
+  assert.deepEqual(out.items.map((i) => i.processId), ["ACQ.4", "ACQ.4", "SPL.2", "SPL.2"]);
+  const a = out.items[0];
+  assert.equal(a.excelId, "QA-ACQ4-001");
+  assert.equal(a.processName, "공급자 모니터링 (ACQ.4)");
+  assert.equal(a.phase, "계획");
+  assert.match(a.basis, /^ACQ\.4\.BP1: /);
+  assert.equal(a.row, 5);
+});
+
+test("basis from 참고 column ('' when absent)", () => {
+  assert.equal(r.items[0].basis, "");
+  const out = imp({ sheets: [{ name: "양식", rows: [["항목 ID", "프로세스", "심사 항목", "참고"], ["", "프로젝트 관리", "q", "MAN.3.BP1"]] }] });
+  assert.equal(out.items[0].basis, "MAN.3.BP1");
+});
+
+test("non-checklist workbook → one format error listing what was found", () => {
+  const out = imp({ sheets: [{ name: "Data", rows: [["이름", "나이"], ["a", 1]] }] });
+  assert.equal(out.issues.length, 1);
+  assert.equal(out.issues[0].level, "error");
+  assert.match(out.issues[0].message, /형식/);
+  assert.ok(out.issues[0].message.includes("Data") && out.issues[0].message.includes("이름"));
+});
+
+test("extra header-less sheet → one warning; name override beats parens", () => {
+  const b = inline([["", "공급자 모니터링 (ACQ.4)", "q"]]);
+  b.sheets.push({ name: "메모", rows: [["아무", "내용"]] });
+  const out = imp(b, { processNameOverrides: { "공급자 모니터링 (ACQ.4)": "SPL.2" } });
+  assert.equal(out.items[0].processId, "SPL.2");
+  const w = out.issues.filter((x) => x.sheet === "메모");
+  assert.equal(w.length, 1);
+  assert.equal(w[0].level, "warning");
+  assert.match(w[0].message, /머리글을 찾지 못해 건너뜀/);
+});
