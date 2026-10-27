@@ -37,6 +37,8 @@ const KIND = {
   process: ["processItems", "itemId"],
 };
 
+const NOT_LOADED = "체크리스트를 아직 불러오지 못했습니다. 잠시 후 다시 시도하세요.";
+
 const cleanStr = (v) => String(v ?? "").trim();
 
 // Confirm input: deep copy, trim strings, drop blank rules / locations.
@@ -64,6 +66,9 @@ const mapItems = (version, kind, key, fn) => {
 /**
  * QA Audit checklist store: one set per browser (IndexedDB key
  * aspice_qa_checklists), shared by every signed-in user.
+ *
+ * lastImport is { summary, issues } or null; summary is null when the import
+ * produced no new version (format errors only), then only issues are set.
  */
 export function useQaChecklist() {
   const { user } = useAuth();
@@ -74,15 +79,20 @@ export function useQaChecklist() {
   const [lastImport, setLastImport] = useState(null);
   // Latest committed state, readable synchronously from handlers.
   const stateRef = useRef(state);
+  // True once the stored set has been read. Mutators are blocked until then so
+  // the empty initial state can never overwrite the stored PC-shared set.
+  const loadedRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
     idbGet(STORAGE_KEY)
       .then((stored) => {
         if (!alive) return;
+        // No mutator can have run yet (loadedRef is false), so this is safe.
         const s = normalizeState(stored);
         stateRef.current = s;
         setState(s);
+        loadedRef.current = true;
       })
       .catch((e) => {
         if (alive) setError(`체크리스트를 불러오지 못했습니다: ${e?.message || e}`);
@@ -95,8 +105,13 @@ export function useQaChecklist() {
     };
   }, []);
 
-  // Apply next state, persist it, and roll back if the write fails.
+  // Apply next state, persist it, and roll back if the write fails. The
+  // rollback only happens if no later commit replaced this state meanwhile.
   const commit = useCallback(async (next) => {
+    if (!loadedRef.current) {
+      setError(NOT_LOADED);
+      return false;
+    }
     const prev = stateRef.current;
     stateRef.current = next;
     setState(next);
@@ -105,8 +120,10 @@ export function useQaChecklist() {
       setError(null);
       return true;
     } catch (e) {
-      stateRef.current = prev;
-      setState(prev);
+      if (stateRef.current === next) {
+        stateRef.current = prev;
+        setState(prev);
+      }
       setError(`저장하지 못했습니다: ${e?.message || e}`);
       return false;
     }
@@ -127,20 +144,27 @@ export function useQaChecklist() {
   const importFiles = useCallback(
     async ({ wpFile, processFile } = {}) => {
       if (!wpFile && !processFile) return;
-      const s = stateRef.current;
-      const ov = s.mappingOverrides;
+      if (!loadedRef.current) {
+        setError(NOT_LOADED);
+        return;
+      }
       try {
-        const run = async (file, importer, opt) => {
-          const book = readWorkbook(await file.arrayBuffer());
-          const res = importer(book, { fileName: file.name, ...opt });
+        // Read the files first; everything after the awaits is synchronous up
+        // to commit(), so state/overrides are read fresh and cannot go stale.
+        const wpBuf = wpFile ? await wpFile.arrayBuffer() : null;
+        const procBuf = processFile ? await processFile.arrayBuffer() : null;
+        const s = stateRef.current;
+        const ov = s.mappingOverrides;
+        const run = (file, buf, importer, opt) => {
+          const res = importer(readWorkbook(buf), { fileName: file.name, ...opt });
           res.fileName = file.name;
           return res;
         };
         const wp = wpFile
-          ? await run(wpFile, importWpChecklist, { sheetOverrides: ov.sheets })
+          ? run(wpFile, wpBuf, importWpChecklist, { sheetOverrides: ov.sheets })
           : null;
         const process = processFile
-          ? await run(processFile, importProcessChecklist, { processNameOverrides: ov.processNames })
+          ? run(processFile, procBuf, importProcessChecklist, { processNameOverrides: ov.processNames })
           : null;
         const issues = [...(wp?.issues ?? []), ...(process?.issues ?? [])];
         // Format errors only (no items): keep the active version, just report.
@@ -167,7 +191,10 @@ export function useQaChecklist() {
           activeVersionId: version.id,
           versions: [...s.versions, version],
         });
-        if (ok) setLastImport({ summary, issues });
+        if (ok) {
+          setLastImport({ summary, issues });
+          setError(null);
+        }
       } catch (e) {
         setError(`가져오기에 실패했습니다: ${e?.message || e}`);
       }
