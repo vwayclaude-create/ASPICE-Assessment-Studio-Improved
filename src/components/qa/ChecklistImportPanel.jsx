@@ -6,7 +6,7 @@ import { T, FONTS } from "../../theme";
 export const PROCESS_OPTIONS = [...processes.map((p) => ({ id: p.id, name: p.name })), { id: "VWAY.PR", name: "산출물 동료 검토" }];
 
 const STATUSES = ["pending", "drafted", "confirmed", "stale"];
-const STATUS_LABEL = { pending: "대기", drafted: "초안", confirmed: "확정", stale: "재확정 필요" };
+export const STATUS_LABEL = { pending: "대기", drafted: "초안", confirmed: "확정", stale: "재확정 필요" };
 
 const card = {
   background: T.surface,

@@ -3,6 +3,7 @@ import { T, FONTS } from "../../theme";
 import { useQaChecklist } from "../../hooks/useQaChecklist";
 import { ChecklistImportPanel } from "./ChecklistImportPanel";
 import { ChecklistVersionList } from "./ChecklistVersionList";
+import { ChecklistItemTable } from "./ChecklistItemTable";
 
 const TABS = [
   { id: "checklist", label: "체크리스트" },
@@ -51,7 +52,7 @@ export function QaAuditView() {
               : "가져온 체크리스트가 없습니다."}
           <div style={{ marginTop: 16 }}>
             <ChecklistImportPanel qa={qa} />
-            {/* Task 10: ChecklistItemTable */}
+            <ChecklistItemTable qa={qa} />
             <ChecklistVersionList qa={qa} />
           </div>
         </div>
