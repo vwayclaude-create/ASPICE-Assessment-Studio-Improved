@@ -138,7 +138,7 @@ export function ChecklistItemTable({ qa }) {
   const currentScope =
     kind === "wp"
       ? sel.sheet !== undefined ? { sheet: sel.sheet } : "all"
-      : sel.processId !== undefined && sel.processId !== null ? { processId: sel.processId } : "all";
+      : sel.processId !== undefined ? { processId: sel.processId } : "all";
 
   const batchConfirm = async () => {
     const wpIds = new Set(version.wpItems.map((w) => w.checkId));

@@ -16,7 +16,7 @@ function inScope(kind, item, scope) {
   if (scope === "all" || !scope) return true;
   if (scope.keys) return new Set(scope.keys).has(item[KINDS[kind].key]);
   if (scope.sheet !== undefined) return kind === "wp" && item.sheet === scope.sheet;
-  if (scope.processId !== undefined) return item.processId === scope.processId;
+  if (scope.processId !== undefined) return (item.processId ?? null) === scope.processId;
   return true;
 }
 
