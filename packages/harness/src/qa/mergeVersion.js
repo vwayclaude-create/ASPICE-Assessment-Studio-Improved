@@ -4,18 +4,30 @@
 const sameText = (a, b) => String(a ?? "") === String(b ?? "");
 
 // Carried item = new import's Excel fields + previous version's QA work.
+// Confirmed work done under another processId needs re-confirmation.
 function carry(next, prev, status) {
+  const moved = (prev.status === "confirmed" || prev.status === "stale") && prev.processId !== next.processId;
   return {
     ...next,
     draft: prev.draft ?? null,
     confirmed: prev.confirmed ?? null,
-    status,
+    status: moved ? "stale" : status,
     confirmedBy: prev.confirmedBy ?? null,
     confirmedAt: prev.confirmedAt ?? null,
   };
 }
 
 const emptyCounts = () => ({ carried: 0, stale: 0, added: 0, removed: 0 });
+
+// Count a text-matched carry: stale if carry() staled it, else carried.
+function tally(counts, item, prevStatus) {
+  if (item.status === "stale" && prevStatus !== "stale") counts.stale++;
+  else counts.carried++;
+  return item;
+}
+
+const newId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 function mergeWp(prevItems, newItems) {
   const counts = emptyCounts();
@@ -25,7 +37,7 @@ function mergeWp(prevItems, newItems) {
     const p = prevById.get(n.checkId);
     if (!p || used.has(p.checkId)) { counts.added++; return n; }
     used.add(p.checkId);
-    if (sameText(p.question, n.question)) { counts.carried++; return carry(n, p, p.status); }
+    if (sameText(p.question, n.question)) return tally(counts, carry(n, p, p.status), p.status);
     counts.stale++;
     return carry(n, p, "stale");
   });
@@ -60,8 +72,7 @@ function mergeProcess(prevItems, newItems) {
     const m = match[i];
     if (!m) { counts.added++; return n; }
     if (m.stale) { counts.stale++; return carry(n, m.prev, "stale"); }
-    counts.carried++;
-    return carry(n, m.prev, m.prev.status);
+    return tally(counts, carry(n, m.prev, m.prev.status), m.prev.status);
   });
   counts.removed = prevItems.filter((p) => !usedPrev.has(p)).length;
   return { items, counts };
@@ -111,7 +122,7 @@ export function buildVersion({ prev = null, wp = null, process = null, mappingOv
   }
 
   let version = {
-    id: globalThis.crypto.randomUUID(),
+    id: newId(),
     version: (prev?.version ?? 0) + 1,
     createdAt: at,
     createdBy: user ?? null,

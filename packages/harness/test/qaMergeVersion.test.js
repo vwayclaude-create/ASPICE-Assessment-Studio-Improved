@@ -137,3 +137,54 @@ test("멱등: 같은 import로 두 번 병합해도 carried만 늘고 status 동
   assert.deepEqual(v2.wpItems.map((i) => i.status), v1.wpItems.map((i) => i.status));
   assert.deepEqual(v2.processItems.map((i) => i.status), v1.processItems.map((i) => i.status));
 });
+
+test("이어받기: 확정/stale 항목의 processId가 바뀌면 stale, 미확정은 상태 유지", () => {
+  const { version: prev } = buildVersion({
+    ...ctx,
+    wp: imp([
+      confirmedWp(),
+      confirmedWp({ checkId: "CH-PP-002", status: "stale" }),
+      wpItem({ checkId: "CH-PP-003", status: "drafted", draft: wpCrit }),
+      confirmedWp({ checkId: "CH-PP-004" }),
+    ]),
+    process: imp([procItem({ status: "confirmed", confirmed: procCrit([]) })]),
+  });
+  const { version, summary } = buildVersion({
+    ...ctx, prev,
+    wp: imp([
+      wpItem({ processId: "MAN.5" }),
+      wpItem({ checkId: "CH-PP-002", processId: "MAN.5" }),
+      wpItem({ checkId: "CH-PP-003", processId: "MAN.5" }),
+      wpItem({ checkId: "CH-PP-004" }),
+    ]),
+  });
+  const by = Object.fromEntries(version.wpItems.map((i) => [i.checkId, i]));
+  assert.equal(by["CH-PP-001"].status, "stale");
+  assert.deepEqual(by["CH-PP-001"].confirmed, wpCrit);
+  assert.equal(by["CH-PP-001"].processId, "MAN.5");
+  assert.equal(by["CH-PP-002"].status, "stale");
+  assert.equal(by["CH-PP-003"].status, "drafted");
+  assert.equal(by["CH-PP-004"].status, "confirmed");
+  assert.deepEqual(summary.wp, { carried: 3, stale: 1, added: 0, removed: 0 });
+
+  // Process side: excelId match across a processId change also goes stale.
+  const { version: pv } = buildVersion({
+    ...ctx, process: imp([procItem({ itemId: "E-1", excelId: "E-1", status: "confirmed", confirmed: procCrit([]) })]),
+  });
+  const r = buildVersion({ ...ctx, prev: pv, process: imp([procItem({ itemId: "E-1", excelId: "E-1", processId: "SYS.3" })]) });
+  assert.equal(r.version.processItems[0].status, "stale");
+});
+
+test("버전 id: crypto.randomUUID가 없어도 만들어진다", () => {
+  const desc = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  Object.defineProperty(globalThis, "crypto", { value: {}, configurable: true, writable: true });
+  try {
+    const a = buildVersion({ ...ctx, wp: imp([wpItem()]) }).version;
+    const b = buildVersion({ ...ctx, wp: imp([wpItem()]) }).version;
+    assert.equal(typeof a.id, "string");
+    assert.ok(a.id.length > 0);
+    assert.notEqual(a.id, b.id);
+  } finally {
+    Object.defineProperty(globalThis, "crypto", desc);
+  }
+});

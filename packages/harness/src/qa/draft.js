@@ -65,7 +65,15 @@ const strList = (v) =>
   (Array.isArray(v) ? v : []).map((s) => String(s ?? "").trim()).filter(Boolean);
 const uniq = (a) => [...new Set(a)];
 
-export function sanitizeWpDraft(raw, { processes }) {
+// With processId: only that process's BP catalog (spec 7.2); else any valid BP.
+function keepBps(list, processes, processId) {
+  const ids = uniq(strList(list));
+  if (processId === undefined) return ids.filter((bp) => isValidBpId(processes, bp));
+  const allowed = new Set(bpCatalog(processes, processId).map((bp) => bp.id));
+  return ids.filter((bp) => allowed.has(bp));
+}
+
+export function sanitizeWpDraft(raw, { processes, processId }) {
   if (!raw || typeof raw !== "object") return null;
   const texts = strList(raw.criteria);
   if (texts.length === 0) return null;
@@ -73,17 +81,17 @@ export function sanitizeWpDraft(raw, { processes }) {
     criteria: texts.map((text, i) => ({ id: `${raw.id}-${i + 1}`, text })),
     polarity: raw.polarity === "negative" ? "negative" : "positive",
     targetLocations: strList(raw.targetLocations),
-    relatedBPs: uniq(strList(raw.relatedBPs)).filter((bp) => isValidBpId(processes, bp)),
+    relatedBPs: keepBps(raw.relatedBPs, processes, processId),
     severity: SEVERITIES.includes(raw.severity) ? raw.severity : "중",
     rationale: String(raw.rationale ?? ""),
   };
 }
 
-export function sanitizeProcessDraft(raw, { processes, candidateIds }) {
+export function sanitizeProcessDraft(raw, { processes, candidateIds, processId }) {
   const r = raw ?? {};
   return {
     linkedWpCheckIds: uniq(strList(r.linkedWpCheckIds)).filter((id) => candidateIds.has(id)),
-    relatedBPs: uniq(strList(r.relatedBPs)).filter((bp) => isValidBpId(processes, bp)),
+    relatedBPs: keepBps(r.relatedBPs, processes, processId),
     aggregation: "default",
     rationale: String(r.rationale ?? ""),
   };
@@ -138,10 +146,10 @@ export async function generateDrafts({ client, kind, groups, processes, batchSiz
       const rawItem = byId.get(g.key);
       if (!rawItem) { failures[g.key] = "응답 없음"; continue; }
       if (kind === "wp") {
-        const d = sanitizeWpDraft({ ...rawItem, id: g.key }, { processes });
+        const d = sanitizeWpDraft({ ...rawItem, id: g.key }, { processes, processId: first.processId });
         if (d) results[g.key] = d; else failures[g.key] = "판정 기준이 비어 있음";
       } else {
-        results[g.key] = sanitizeProcessDraft(rawItem, { processes, candidateIds });
+        results[g.key] = sanitizeProcessDraft(rawItem, { processes, candidateIds, processId: first.processId });
       }
     }
   }));

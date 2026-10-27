@@ -116,3 +116,22 @@ test("wpCandidatesFor: 같은 processId 전부 + 다른 processId의 확정+관�
   assert.deepEqual(ids.sort(), ["A", "B"]);
   assert.deepEqual(Object.keys(wpCandidatesFor(version, "MAN.3", P)[0]).sort(), ["checkId", "question", "workProduct"]);
 });
+
+test("generateDrafts: 배치 프로세스 BP 목록 밖 relatedBPs 제거 (wp/process 모두)", async () => {
+  const client = { async generateJson() {
+    return { parsed: { items: [{ ...okItem("CH-0"), relatedBPs: ["MAN.3.BP1", "SYS.2.BP1"] }] } };
+  } };
+  const r = await generateDrafts({ client, kind: "wp", groups: mkGroups(1), processes: P });
+  assert.deepEqual(r.results["CH-0"].relatedBPs, ["MAN.3.BP1"]);
+  const pc = { async generateJson() {
+    return { parsed: { items: [{ id: "QA-1", linkedWpCheckIds: [], relatedBPs: ["SYS.2.BP1", "MAN.3.BP2"], rationale: "" }] } };
+  } };
+  const r2 = await generateDrafts({ client: pc, kind: "process", processes: P,
+    groups: [{ key: "QA-1", processId: "MAN.3", question: "q", candidates: [] }] });
+  assert.deepEqual(r2.results["QA-1"].relatedBPs, ["MAN.3.BP2"]);
+});
+
+test("sanitize: processId를 주면 그 프로세스 BP만 남김", () => {
+  assert.deepEqual(sanitizeWpDraft(rawWp({ relatedBPs: ["MAN.3.BP5", "SYS.2.BP1"] }), { processes: P, processId: "MAN.3" }).relatedBPs, ["MAN.3.BP5"]);
+  assert.deepEqual(sanitizeProcessDraft({ relatedBPs: ["SYS.2.BP1"] }, { processes: P, candidateIds: new Set(), processId: "MAN.3" }).relatedBPs, []);
+});
