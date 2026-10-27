@@ -37,6 +37,7 @@ const SHEETS = [
 
 test("sheet names map per spec 3.1", () => {
   for (const [name, id] of SHEETS) assert.equal(processIdForSheet(name), id, name);
+  assert.equal(processIdForSheet("23. SW Code "), "SWE.3");
   assert.equal(processIdForSheet("99. 모르는 시트"), null);
   assert.equal(processIdForSheet("99. 모르는 시트", { "99. 모르는 시트": "SUP.1" }), "SUP.1");
   assert.equal(processIdForSheet("1.프로젝트계획서", { "1.프로젝트계획서": "SUP.1" }), "SUP.1");
