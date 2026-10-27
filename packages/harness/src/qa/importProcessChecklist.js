@@ -50,7 +50,7 @@ export function importProcessChecklist(book, { fileName, processNameOverrides = 
 
     const rawId = str(r[COL.id]);
     const excelId = rawId && !PLACEHOLDER.test(rawId) ? rawId : null;
-    const key = processId ?? `?${processName}`;
+    const key = processId ?? "UNMAPPED";
     counters[key] = (counters[key] ?? 0) + 1;
     const itemId = excelId ?? `QA-${processId ?? "UNMAPPED"}-${String(counters[key]).padStart(3, "0")}`;
     if (seen.has(itemId)) { issue("error", row, `항목 ID가 중복됩니다 (${itemId})`); continue; }

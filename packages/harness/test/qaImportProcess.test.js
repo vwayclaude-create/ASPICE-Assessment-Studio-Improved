@@ -75,3 +75,9 @@ test("wp checklist in process slot → single format error", () => {
   assert.equal(out.issues[0].level, "error");
   assert.match(out.issues[0].message, /형식/);
 });
+
+test("two distinct unknown process names both import with distinct ids", () => {
+  const out = imp(inline([["", "가 프로세스", "q1"], ["", "나 프로세스", "q2"]]));
+  assert.deepEqual(out.items.map((i) => i.itemId), ["QA-UNMAPPED-001", "QA-UNMAPPED-002"]);
+  assert.ok(!out.issues.some((x) => /중복/.test(x.message)));
+});
