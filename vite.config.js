@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { jwtVerify } from 'jose'
 import { handleEvaluate, handleProject } from './api/_harnessService.js'
+import { handleQaDraft } from './api/_qaDraftService.js'
 
 function harnessDevPlugin(env) {
   const jwtSecret = env.SUPABASE_JWT_SECRET
@@ -95,6 +96,30 @@ function harnessDevPlugin(env) {
           }
           console.error('[aspice] /api/project failed:', e)
           return json(res, 502, { error: 'Harness project evaluation failed', detail: String(e?.message || e) })
+        }
+      })
+
+      server.middlewares.use('/api/qa-draft', async (req, res) => {
+        preflight(req, res)
+        if (req.method === 'OPTIONS') return json(res, 200, {})
+        if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' })
+
+        const auth = await verifyAuth(req)
+        if (!auth.ok) return json(res, 401, { error: 'Unauthorized. Sign in required.' })
+
+        try {
+          const body = await readBody(req)
+          const out = await handleQaDraft(body, env)
+          return json(res, 200, out)
+        } catch (e) {
+          if (e?.code === 'PAYLOAD_TOO_LARGE') {
+            return json(res, 413, { error: 'Payload too large', detail: e.message })
+          }
+          if (e?.code === 'BAD_REQUEST') {
+            return json(res, 400, { error: 'Bad request', detail: e.message })
+          }
+          console.error('[aspice] /api/qa-draft failed:', e)
+          return json(res, 502, { error: 'QA draft generation failed', detail: String(e?.message || e) })
         }
       })
     },
