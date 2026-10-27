@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { T, FONTS } from "../../theme";
 import { useQaChecklist } from "../../hooks/useQaChecklist";
+import { ChecklistImportPanel } from "./ChecklistImportPanel";
+import { ChecklistVersionList } from "./ChecklistVersionList";
 
 const TABS = [
   { id: "checklist", label: "체크리스트" },
@@ -47,7 +49,11 @@ export function QaAuditView() {
             : qa.active
               ? `활성 버전 v${qa.active.version} · 산출물 ${qa.active.wpItems.length}건 · 프로세스 ${qa.active.processItems.length}건`
               : "가져온 체크리스트가 없습니다."}
-          {/* Task 9·10: ChecklistImportPanel, ChecklistItemTable, ChecklistVersionList */}
+          <div style={{ marginTop: 16 }}>
+            <ChecklistImportPanel qa={qa} />
+            {/* Task 10: ChecklistItemTable */}
+            <ChecklistVersionList qa={qa} />
+          </div>
         </div>
       )}
     </main>
