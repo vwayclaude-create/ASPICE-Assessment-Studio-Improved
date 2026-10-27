@@ -16,7 +16,8 @@
     "./crossProcess": "./src/crossProcess/index.js",
     "./io": "./src/io/index.js",
     "./llm": "./src/llm/index.js",
-    "./model": "./src/model/index.js"
+    "./model": "./src/model/index.js",
+    "./qa": "./src/qa/index.js"
   },
   "scripts": {
     "start": "node src/cli.js",
